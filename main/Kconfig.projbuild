@@ -1,0 +1,14 @@
+menu "CRSF-MIM"
+    choice CRSF_FIRMWARE
+        prompt "Board"
+        default CRSF_FIRMWARE_TX
+        config CRSF_FIRMWARE_TX
+            bool "TX"
+            help
+                Transmitter firmware
+        config CRSF_FIRMWARE_RX
+            bool "RX"
+            help
+                Receiver firmware
+    endchoice
+endmenu
