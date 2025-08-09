@@ -1,4 +1,4 @@
 idf_component_register(
-  SRCS "main_rx.cpp" "main_tx.cpp"
+  SRCS "main_rx.cpp" "main_tx.cpp" "mim_menu.c"
   INCLUDE_DIRS "."
-  REQUIRES protocol esp_driver_gptimer esp_driver_uart)
+  REQUIRES libcrsf esp_driver_gptimer esp_driver_uart async_logging)

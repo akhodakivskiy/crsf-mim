@@ -1,13 +1,13 @@
+#include "esp_log_buffer.h"
+#include "libcrsf.h"
+#include "libcrsf_device.h"
+#include "libcrsf_device_param.h"
 #include <sdkconfig.h>
 
 #ifdef CONFIG_CRSF_FIRMWARE_TX
 
-#include "driver/gptimer_types.h"
 #include "esp_err.h"
-#include "esp_log_buffer.h"
-#include "esp_log_level.h"
-#include "esp_rom_sys.h"
-#include "freertos/FreeRTOS.h"
+#include "esp_log.h"
 #include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include <stdint.h>
@@ -28,9 +28,9 @@ static const char *TAG_MODULE = "MAIN_TX_MODULE";
 #include <hal/uart_ll.h>
 #include <rom/gpio.h>
 
-#include "protocol_crsf.h"
-
-#include <map>
+#include "async_logging.h"
+#include "libcrsf_parser.h"
+#include "mim_menu.h"
 
 
 #define UART_PORT_CONTROLLER UART_NUM_1
@@ -52,6 +52,8 @@ QueueHandle_t queue_crsf_controller = NULL;
 QueueHandle_t queue_crsf_module = NULL;
 
 uint64_t _last_crsf_period_us;
+
+crsf_device_t crsf_device;
 
 /*
 static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *event, void *user_ctx) {
@@ -107,6 +109,16 @@ void _timer_set_alarm(gptimer_handle_t timer, uint64_t alarm_us) {
 }
 */
 
+void _handle_crsf_device(const crsf_frame_t *frame_in) {
+    crsf_frame_t frame_out;
+    crsf_device_result_t err = crsf_device_client_handler(&crsf_device, frame_in, &frame_out);
+
+    if (err == CRSF_DEVICE_RESULT_OK) {
+        assert(xQueueSend(queue_crsf_module, &frame_out, 0) == pdPASS);
+    }
+
+}
+
 void IRAM_ATTR _half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT));
     //gpio_matrix_in(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
@@ -155,11 +167,6 @@ void _setup_uart(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {
     ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 512, queue, 0));
     ESP_ERROR_CHECK(uart_intr_config(port, &intr_cfg));
     ESP_ERROR_CHECK(uart_enable_rx_intr(port));
-
-    ESP_LOGI(TAG, "port=%u, tx_signal=%u, rx_signal=%u", port,
-             UART_PERIPH_SIGNAL(port, SOC_UART_TX_PIN_IDX),
-             UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX));
-
 }
 
 bool _uart_read_crsf_frame(const char *tag, uart_port_t port, QueueHandle_t queue_uart, 
@@ -176,23 +183,18 @@ bool _uart_read_crsf_frame(const char *tag, uart_port_t port, QueueHandle_t queu
         if (event.type == UART_DATA || event.type == UART_BREAK) {
             len_read = uart_read_bytes(port, buff, len_buffer, portMAX_DELAY);
 
-            crsf_parse_ctx_t ctx;
-            memset(&ctx, 0, sizeof(crsf_parse_ctx_t));
-            memset(frame, 0, sizeof(crsf_frame_t));
-            ctx.frame = frame;
+            crsf_parser_t p;
+            crsf_parser_init(&p, frame);
 
             for (int i = 0; i < len_read; i++) {
-                crsf_frame_partial_parse(&ctx, buff[i]);
+                crsf_parse_result_t err = crsf_parser_parse_byte(&p, buff[i]);
 
-                if (ctx.status == CRSF_FRAME_STATUS_FRAME_READY) {
+                if (err == CRSF_PARSE_RESULT_FRAME_COMPLETE) {
                     result = true;
                     break;
-                } else if (ctx.status == CRSF_FRAME_STATUS_ERROR_LENGTH ||
-                    ctx.status == CRSF_FRAME_STATUS_ERROR_CRC ||
-                    ctx.status == CRSF_FRAME_STATUS_ERROR_SYNC) {
+                } else if (err != CRSF_PARSE_RESULT_NEED_MORE_DATA) {
                     ESP_LOG_BUFFER_HEX(tag, reinterpret_cast<uint8_t *>(buff), len_read);
-                    ESP_LOGE(tag, "crsf error=%u, event=%u, size=%u, flag=%u, len_buffer=%u", ctx.status, event.type, event.size, event.timeout_flag, len_buffer);
-                    break;
+                    ESP_LOGE(tag, "crsf [parser error=%u, state=%u], event[%u, size=%u, flag=%u, len_buffer=%u]", err, p.state, event.type, event.size, event.timeout_flag, len_buffer);
                 }
             }
         } else if (event.type == UART_FIFO_OVF) {
@@ -209,6 +211,7 @@ bool _uart_read_crsf_frame(const char *tag, uart_port_t port, QueueHandle_t queu
     }
 
     uart_flush_input(port);
+
     return result;
 }
 
@@ -226,15 +229,16 @@ void _swap_crsf_frame(crsf_frame_t *frame) {
         for (int i = 0; i < UINT8_MAX; i++) {
             if (_frame_type_counter[i] > 0) {
                 log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, _frame_type_counter[i]);
-                ESP_LOGI(TAG, "%s", log);
             }
         }
+        ESP_LOGI(TAG, "%s", log);
     }
 }
 
 static void _task_controller(void *arg) {
     _setup_uart(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, &queue_uart_controller);
     _half_duplex_set_rx(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER);
+    mim_menu_init(&crsf_device);
 
     static uint32_t frames_rcvd = 0, frames_sent = 0;
 
@@ -247,6 +251,7 @@ static void _task_controller(void *arg) {
             frames_rcvd += 1;
 
             _swap_crsf_frame(&frame);
+            _handle_crsf_device(&frame);
 
             assert(xQueueSend(queue_crsf_controller, &frame, 0) == pdPASS);
 
@@ -254,8 +259,12 @@ static void _task_controller(void *arg) {
                 frames_sent += 1;
 
                 _half_duplex_set_tx(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER);
-                assert(uart_write_bytes(UART_PORT_CONTROLLER, &frame, frame.length + 2) == frame.length + 2);
+
+                uint8_t header[3] = { frame.sync, frame.length, frame.type };
+                assert(uart_write_bytes(UART_PORT_CONTROLLER, header, 3) == 3);
+                assert(uart_write_bytes(UART_PORT_CONTROLLER, frame.data, frame.length - 1) == (frame.length - 1));
                 ESP_ERROR_CHECK(uart_wait_tx_done(UART_PORT_CONTROLLER, portMAX_DELAY));
+
                 _half_duplex_set_rx(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER);
             }
 
@@ -280,7 +289,9 @@ static void _task_module(void *arg) {
             frames_rcvd += 1;
             _half_duplex_set_tx(UART_PORT_MODULE, UART_PIN_MODULE);
 
-            assert(uart_write_bytes(UART_PORT_MODULE, &frame, frame.length + 2) == frame.length + 2);
+            uint8_t header[3] = { frame.sync, frame.length, frame.type };
+            assert(uart_write_bytes(UART_PORT_MODULE, header, 3) == 3);
+            assert(uart_write_bytes(UART_PORT_MODULE, frame.data, frame.length - 1) == (frame.length - 1));
             ESP_ERROR_CHECK(uart_wait_tx_done(UART_PORT_MODULE, portMAX_DELAY));
 
             _half_duplex_set_rx(UART_PORT_MODULE, UART_PIN_MODULE);
@@ -296,10 +307,12 @@ static void _task_module(void *arg) {
 }
 
 extern "C" void app_main(void) {
+    async_logging_init(PRO_CPU_NUM);
+
     queue_crsf_controller = xQueueCreate(10, sizeof(crsf_frame_t));
     queue_crsf_module = xQueueCreate(10, sizeof(crsf_frame_t));
 
-    assert(xTaskCreatePinnedToCore(_task_module, "module", 4096, NULL, configMAX_PRIORITIES - 2, &task_module, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_module, "module", 4096, NULL, configMAX_PRIORITIES - 2, &task_module, PRO_CPU_NUM) == pdPASS);
     vTaskDelay(10);
     assert(xTaskCreatePinnedToCore(_task_controller, "controller", 4096, NULL, configMAX_PRIORITIES - 2, &task_controller, PRO_CPU_NUM) == pdPASS);
 }

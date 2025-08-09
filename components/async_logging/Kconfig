@@ -1,0 +1,8 @@
+menu "Async Logging"
+    config ASYNC_LOGGING_BUFFER_LEN
+        int "Async logging buffer length"
+        default 4096
+    config ASYNC_LOGGING_ENABLED
+        bool "Async logging is enabled"
+        default y
+endmenu

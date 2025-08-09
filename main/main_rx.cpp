@@ -17,7 +17,7 @@
 #include <soc/soc.h>
 #include <hal/uart_ll.h>
 
-#include "protocol_crsf.h"
+#include "libcrsf_parser.h"
 
 static const char *TAG = "MAIN_RX";
 

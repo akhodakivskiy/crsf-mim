@@ -1,0 +1,8 @@
+menu "libcrsf"
+    config LIBCRSF_PARAM_MAX_COUNT
+        int "Maximum number of parameters"
+        default 10
+    config LIBCRSF_PARAM_SELECT_OPTION_MAX_COUNT
+        int "Maximum number of options in SELECT parameter entries"
+        default 10
+endmenu
