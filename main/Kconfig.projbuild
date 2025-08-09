@@ -12,3 +12,24 @@ menu "CRSF-MIM"
                 Receiver firmware
     endchoice
 endmenu
+
+menu "Wi-Fi / UDP"
+    depends on CRSF_FIRMWARE_TX || CRSF_FIRMWARE_RX
+
+    config WIFI_SSID
+        string "Wi-Fi name"
+        default "Galaxy1"
+
+    config WIFI_PASSWORD
+        string "Wi-Fi password"
+        default "galaxy12"
+
+    config UDP_PORT
+        int "UDP port"
+        range 1 65535
+        default 8888
+
+    config UDP_BROADCAST
+        bool "Send to broadcast address"
+        default y
+endmenu

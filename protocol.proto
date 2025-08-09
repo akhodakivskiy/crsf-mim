@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package ai.skyfortress.guidance;
+
+import "google/protobuf/timestamp.proto";
+
+
+// Target state estimate
+message TargetEstimate {
+    google.protobuf.Timestamp timestamp = 1;            // timestamp of the radar point, in UTC, up to nanosecond precision
+    bool                      precise_timestamp = 2;        // true if timestamp comes from high-precision source (such as GPS synchronized time), false otherwise
+    string                    target_id = 3;                // unique identifier for the object as reported by the radar
+    WGS84                     position = 4;                 // position of the object in WGS84 coordinates
+    EnuVelocity               velocity = 5;                 // velocity of the object, in ENU coordinates, m/s
+    EstimateState             state = 6;                    // state of the estimate
+    EstimateUncertainties     uncertainties = 7;            // [optional] uncertainties of the estimate
+}
+
+// Raw data from the radar
+message RawData {
+    google.protobuf.Timestamp timestamp_utc = 1;            // timestamp of the radar point, in UTC, up to nanosecond precision
+    uint32                    track_id = 3;                 // unique identifier for the object track as reported by the radar
+    WGS84                     position = 4;                 // position of the object in WGS84 coordinates
+    EnuUncertainty            position_uncertainty = 5;     // uncertainties of the position estimate
+}
+
+
+message EstimateUncertainties {
+    EnuUncertainty position = 1;                            // uncertainties of the position estimate
+    EnuUncertainty velocity = 2;                            // uncertainties of the velocity estimate
+}
+
+
+enum EstimateState {
+    Unstable = 0;     // the estimate is not (yet) stable and must not be used
+    Stable = 1;       // the estimate is stable and can be used
+}
+
+// Geodesic position in WGS84 coordinates
+message WGS84 {
+    float latitude_deg = 1;
+    float longitude_deg = 2;
+    float altitude_msl_m = 3;
+}
+
+// Velocity in local ENU coordinates
+message EnuVelocity {
+    float east_ms = 1;
+    float north_ms = 2;
+    float up_ms = 3;
+}
+
+// Uncertainty in local ENU coordinates
+message EnuUncertainty {
+    float east = 1;
+    float north = 2;
+    float up = 3;
+}
+
+message Ping {
+
+}
+
+// Messages sent from the server to the end-user
+message ServerMessage {
+    oneof message {
+        Ping ping = 1;
+        TargetEstimate target_estimate = 2;
+        TargetEstimate interceptor_estimate = 3;
+        RawData target_raw = 4;
+        RawData target_interceptor = 5;
+    }
+}
+
+// Current status of the client
+message ClientStatus {
+    ClientState state = 1;
+    WGS84 position = 2;                         // [optional]
+}
+
+
+enum ClientState {
+    NotReady = 0;                               // the client is not ready to engage
+    Ready = 1;                                  // the client is ready to engage
+    Engaging = 2;                               // the client is currently engaging a target
+}
+
+
+message ClientMessage {
+    oneof message {
+        ClientStatus status = 1;
+    }
+}

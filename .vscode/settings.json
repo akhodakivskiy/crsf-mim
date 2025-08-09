@@ -1,0 +1,20 @@
+{
+  "idf.openOcdConfigs": [
+    "interface/ftdi/esp_ftdi.cfg",
+    "target/esp32s3.cfg"
+],
+  "idf.flashType": "UART",
+  "idf.portWin": "COM9",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32s3"
+},
+  "clangd.path": "C:\\Users\\Admin\\.espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=C:\\Users\\Admin\\.espressif\\tools\\xtensa-esp-elf\\esp-14.2.0_20241119\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
+    "--compile-commands-dir=c:\\Users\\Admin\\crsf-mim\\build"
+  ],
+  "files.associations": {
+    "timestamp.pb.h": "c"
+  }
+}
