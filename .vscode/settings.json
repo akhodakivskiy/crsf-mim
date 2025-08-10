@@ -4,7 +4,7 @@
     "target/esp32s3.cfg"
 ],
   "idf.flashType": "UART",
-  "idf.portWin": "COM9",
+  "idf.portWin": "COM8",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
 },

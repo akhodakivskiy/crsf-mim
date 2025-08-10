@@ -100,7 +100,7 @@ static uint64_t s_last_connect_attempt = 0;
 #define UART_PIN_MODULE GPIO_NUM_14
 
 #define CRSF_RATE_HZ 62
-#define CRSF_BAUDRATE 115200
+#define CRSF_BAUDRATE 420000
 #define CRSF_INVERTED false
 
 TaskHandle_t task_controller = NULL;
@@ -110,6 +110,9 @@ QueueHandle_t queue_uart_module = NULL;
 
 QueueHandle_t queue_crsf_controller = NULL;
 QueueHandle_t queue_crsf_module = NULL;
+
+static crsf_parse_ctx_t s_ctx_controller;
+static crsf_parse_ctx_t s_ctx_module;
 
 static QueueHandle_t      udp_data_queue = nullptr;
 static SemaphoreHandle_t  udp_buffer_mutex = nullptr;
@@ -182,6 +185,12 @@ void IRAM_ATTR _half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
     //gpio_matrix_out(pin, UART_PERIPH_SIGNAL(port, SOC_UART_TX_PIN_IDX), true, false);
 }
 
+static void crsf_ctx_reset(crsf_parse_ctx_t* ctx, crsf_frame_t* frame) {
+    memset(ctx, 0, sizeof(*ctx));
+    memset(frame, 0, sizeof(*frame));
+    ctx->frame = frame;
+}
+
 void _setup_uart(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {
     uart_config_t cfg = {
         .baud_rate = CRSF_BAUDRATE,
@@ -199,16 +208,16 @@ void _setup_uart(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {
 
     uint32_t uart_intr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_OVF | UART_INTR_RXFIFO_TOUT;
 
-    uart_intr_config_t intr_cfg {
-        .intr_enable_mask = uart_intr_mask,
-        .rx_timeout_thresh = 2,
-        .txfifo_empty_intr_thresh = 0,
-        .rxfifo_full_thresh = 64,
+    uart_intr_config_t intr_cfg{
+    .intr_enable_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_OVF | UART_INTR_RXFIFO_TOUT,
+    .rx_timeout_thresh = 2,          // ок
+    .txfifo_empty_intr_thresh = 0,
+    .rxfifo_full_thresh = 120,       // під 420к бод краще вище
     };
 
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(port, pin, pin, -1, -1));
-    ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 512, queue, 0));
+    ESP_ERROR_CHECK(uart_driver_install(port, 2048, 2048, 64, queue, 0));
     ESP_ERROR_CHECK(uart_intr_config(port, &intr_cfg));
     ESP_ERROR_CHECK(uart_enable_rx_intr(port));
 
@@ -219,52 +228,47 @@ void _setup_uart(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {
 }
 
 bool _uart_read_crsf_frame(const char *tag, uart_port_t port, QueueHandle_t queue_uart, 
-                           crsf_frame_t *frame, TickType_t timeout) {
+                           crsf_parse_ctx_t *ctx, crsf_frame_t *frame, TickType_t timeout)
+{
     bool result = false;
     uint8_t buff[256];
-
     uart_event_t event;
-    size_t len_buffer = 0, len_read = 0;
 
-    if (xQueueReceive(queue_uart, &event, timeout) == pdPASS) {
-        ESP_ERROR_CHECK(uart_get_buffered_data_len(port, &len_buffer));
+    if (xQueueReceive(queue_uart, &event, timeout) != pdPASS) return false;
 
-        if (event.type == UART_DATA || event.type == UART_BREAK) {
-            len_read = uart_read_bytes(port, buff, len_buffer, portMAX_DELAY);
+    size_t len_buffer = 0;
+    ESP_ERROR_CHECK(uart_get_buffered_data_len(port, &len_buffer));
 
-            crsf_parse_ctx_t ctx;
-            memset(&ctx, 0, sizeof(crsf_parse_ctx_t));
-            memset(frame, 0, sizeof(crsf_frame_t));
-            ctx.frame = frame;
+    if (event.type == UART_DATA || event.type == UART_BREAK) {
+        size_t len_read = uart_read_bytes(port, buff, len_buffer, portMAX_DELAY);
 
-            for (int i = 0; i < len_read; i++) {
-                crsf_frame_partial_parse(&ctx, buff[i]);
-
-                if (ctx.status == CRSF_FRAME_STATUS_FRAME_READY) {
-                    result = true;
-                    break;
-                } else if (ctx.status == CRSF_FRAME_STATUS_ERROR_LENGTH ||
-                    ctx.status == CRSF_FRAME_STATUS_ERROR_CRC ||
-                    ctx.status == CRSF_FRAME_STATUS_ERROR_SYNC) {
-                    ESP_LOG_BUFFER_HEX(tag, reinterpret_cast<uint8_t *>(buff), len_read);
-                    ESP_LOGE(tag, "crsf error=%u, event=%u, size=%u, flag=%u, len_buffer=%u", ctx.status, event.type, event.size, event.timeout_flag, len_buffer);
-                    break;
-                }
+        for (size_t i = 0; i < len_read; i++) {
+            crsf_frame_partial_parse(ctx, buff[i]);
+            if (ctx->status == CRSF_FRAME_STATUS_FRAME_READY) {
+                *frame = *(ctx->frame);      // копія з буфера парсера
+                result = true;
+                crsf_ctx_reset(ctx, ctx->frame);  // готуємось до наступного кадру
+                break;
+            } else if (ctx->status == CRSF_FRAME_STATUS_ERROR_LENGTH ||
+                       ctx->status == CRSF_FRAME_STATUS_ERROR_CRC ||
+                       ctx->status == CRSF_FRAME_STATUS_ERROR_SYNC) {
+                ESP_LOGE(tag, "crsf error=%u, event=%u, size=%u, flag=%u, len_buffer=%u",
+                         ctx->status, event.type, event.size, event.timeout_flag, len_buffer);
+                // ПЕРЕЗАПУСК парсера лише при помилці
+                crsf_ctx_reset(ctx, ctx->frame);
+                break;
             }
-        } else if (event.type == UART_FIFO_OVF) {
-            ESP_LOGI(tag, "event=overflow, size=%u, flag=%u, len_buffer=%u", event.size, event.timeout_flag, len_buffer);
-            uart_flush_input(port);
-            xQueueReset(queue_uart);
-        } else if (event.type == UART_BUFFER_FULL) {
-            ESP_LOGI(tag, "event=full, size=%u, flag=%u, len_buffer=%u", event.size, event.timeout_flag, len_buffer);
-            uart_flush_input(port);
-            xQueueReset(queue_uart);
-        } else {
-            ESP_LOGI(tag, "event=0x%x, size=%u, flag=%u, len_buffer=%u", event.type, event.size, event.timeout_flag, len_buffer);
         }
+    } else if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL) {
+        ESP_LOGW(tag, "UART overflow/full, flushing");
+        uart_flush_input(port);
+        xQueueReset(queue_uart);
+        crsf_ctx_reset(ctx, ctx->frame);
+    } else {
+        ESP_LOGD(tag, "uart event=%u, size=%u", event.type, event.size);
     }
 
-    uart_flush_input(port);
+    // ВАЖЛИВО: НЕ flush тут у нормальному випадку!
     return result;
 }
 
@@ -362,6 +366,15 @@ static inline uint16_t map_height_m_to_us(double h) {
     return (uint16_t)(us + 0.5);
 }
 
+static inline bool crsf_verify_crc(const crsf_frame_t *f){
+    // length = bytes from TYPE..CRC (включно з CRC)
+    const uint8_t *type_ptr = reinterpret_cast<const uint8_t*>(&f->type);
+    size_t len_no_crc = f->length - 1;
+    uint8_t calc = crc8_d5(type_ptr, len_no_crc);
+    const uint8_t *crc_ptr = type_ptr + len_no_crc;
+    return (*crc_ptr == calc);
+}
+
 void _swap_crsf_frame(crsf_frame_t *frame) {
     static uint32_t _frame_type_counter[UINT8_MAX] = {0};
     _frame_type_counter[frame->type] = _frame_type_counter[frame->type] + 1;
@@ -381,16 +394,21 @@ void _swap_crsf_frame(crsf_frame_t *frame) {
     }
 
     if (frame->type == CRSF_FRAMETYPE_RC_CHANNELS_PACKED) {
+        // очікувана довжина RC кадру: 24 (1 type + 22 payload + 1 crc)
+        if (frame->length != 24) return;
+        if (!crsf_verify_crc(frame)) return;
+
         uint16_t ch[16];
         crsf_unpack_rc_channels_us(frame, ch);
 
+        // гістерезис тумблера
         static bool s_guidance_mode = false;
-        const int ON_TH = 1550, OFF_TH = 1450;
+        const int ON_TH=1550, OFF_TH=1450;
         if      (ch[4] > ON_TH)  s_guidance_mode = true;
         else if (ch[4] < OFF_TH) s_guidance_mode = false;
 
         guidance_metrics_t gm;
-        bool have_guid = guidance_snapshot(&gm, /*max_age_s=*/0.5);
+        bool have_guid = guidance_snapshot(&gm, 0.5);
 
         if (s_guidance_mode && have_guid) {
             ch[0] = map_azimuth_deg_to_us(gm.az_rel_deg);
@@ -400,8 +418,6 @@ void _swap_crsf_frame(crsf_frame_t *frame) {
 
             crsf_pack_rc_channels_us(frame, ch);
             crsf_update_crc(frame);
-
-            ESP_LOGI(TAG, "GUIDANCE: CH1=%u, CH3=%u", ch[0], ch[2]);
         }
     }
 }
@@ -648,7 +664,7 @@ static void _task_udp_processor(void *arg) {
                          "U=%.1fm, dAlt=%.1fm",
                          m.az_true_deg, m.az_rel_deg, m.elev_deg, m.rel_height_m, m.alt_diff_m);
 
-                if (xSemaphoreTake(g_guid_mtx, pdMS_TO_TICKS(5)) == pdTRUE) {
+                if (xSemaphoreTake(g_guid_mtx, pdMS_TO_TICKS(2)) == pdTRUE) {
                     g_guid.az_rel_deg = m.az_rel_deg;
                     g_guid.rel_height_m = m.rel_height_m;
                     g_guid.src_timestamp_s = (double)esp_timer_get_time() * 1e-6;
@@ -855,11 +871,12 @@ static void _task_controller(void *arg) {
     _half_duplex_set_rx(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER);
 
     static uint32_t frames_rcvd = 0, frames_sent = 0;
-
-    crsf_frame_t frame;
+    static crsf_frame_t s_frame_controller;
+    crsf_ctx_reset(&s_ctx_controller, &s_frame_controller);
 
     while (true) {
-        bool is_frame_ready = _uart_read_crsf_frame(TAG_CONTROLLER, UART_PORT_CONTROLLER, queue_uart_controller, &frame, portMAX_DELAY);
+        crsf_frame_t frame;
+        bool is_frame_ready = _uart_read_crsf_frame(TAG_CONTROLLER, UART_PORT_CONTROLLER, queue_uart_controller, &s_ctx_controller, &frame, portMAX_DELAY);
 
         if (is_frame_ready) {
             frames_rcvd += 1;
@@ -889,11 +906,13 @@ static void _task_module(void *arg) {
 
     _half_duplex_set_rx(UART_PORT_MODULE, UART_PIN_MODULE);
 
-    crsf_frame_t frame;
+    static crsf_frame_t s_frame_controller;
+    crsf_ctx_reset(&s_ctx_controller, &s_frame_controller);
 
     uint32_t frames_sent = 0, frames_rcvd = 0;
 
     while (true) {
+        crsf_frame_t frame;
         if (xQueueReceive(queue_crsf_controller, &frame, portMAX_DELAY) == pdPASS) {
             frames_rcvd += 1;
             _half_duplex_set_tx(UART_PORT_MODULE, UART_PIN_MODULE);
@@ -903,7 +922,7 @@ static void _task_module(void *arg) {
 
             _half_duplex_set_rx(UART_PORT_MODULE, UART_PIN_MODULE);
 
-            bool is_frame_ready = _uart_read_crsf_frame(TAG_MODULE, UART_PORT_MODULE, queue_uart_module, &frame, pdMS_TO_TICKS(1000/CRSF_RATE_HZ));
+            bool is_frame_ready = _uart_read_crsf_frame(TAG_CONTROLLER, UART_PORT_CONTROLLER, queue_uart_controller, &s_ctx_controller, &frame, portMAX_DELAY);
 
             if (is_frame_ready) {
                 frames_sent += 1;
