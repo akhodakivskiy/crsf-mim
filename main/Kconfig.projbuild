@@ -1,14 +1,26 @@
 menu "CRSF-MIM"
-    choice CRSF_FIRMWARE
+    choice CRSF_MIM_FIRMWARE
         prompt "Board"
-        default CRSF_FIRMWARE_TX
-        config CRSF_FIRMWARE_TX
+        default CRSF_MIM_FIRMWARE_TX
+        config CRSF_MIM_FIRMWARE_TX
             bool "TX"
             help
                 Transmitter firmware
-        config CRSF_FIRMWARE_RX
+        config CRSF_MIM_FIRMWARE_RX
             bool "RX"
             help
                 Receiver firmware
     endchoice
+    config CRSF_MIM_WIFI_SSID
+        string "WiFi SSID"
+        help
+            WiFi SSID for Wifi Mode
+    config CRSF_MIM_WIFI_PASSWORD
+        string "WiFi Password"
+        help
+            WiFi Password for WiFi Mode
+    config CRSF_MIM_SKYMAP_UDP_PORT
+        int "UDP port for Skymap"
+        help
+            "UDP Port on which Skymap will send TATEP traffic"
 endmenu

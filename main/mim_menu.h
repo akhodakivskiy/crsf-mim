@@ -13,4 +13,4 @@ void mim_menu_init(crsf_device_t *device);
 }
 #endif
 
-#endif
+#endif // MIM_MENU_H

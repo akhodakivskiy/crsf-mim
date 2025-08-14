@@ -1,4 +1,17 @@
 idf_component_register(
-  SRCS "main_rx.cpp" "main_tx.cpp" "mim_menu.c"
+  SRCS 
+    "mim_menu.c" 
+    "mim_uart.c"
+    "mim_skymap.c"
+    "mim_settings.c"
+    "main_rx.c" 
+    "main_tx.c" 
   INCLUDE_DIRS "."
-  REQUIRES libcrsf esp_driver_gptimer esp_driver_uart async_logging)
+  REQUIRES 
+    async_logging
+    libcrsf 
+    libnet 
+    esp_driver_gptimer 
+    esp_driver_uart 
+    esp_driver_gpio 
+    skymap)

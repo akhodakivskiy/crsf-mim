@@ -1,12 +1,17 @@
 #include "async_logging.h"
-
-static const char *TAG = "ASYNC_LOGGING";
+#include <sdkconfig.h>
 
 #include <stdio.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/ringbuf.h>
 #include <freertos/task.h>
-#include <sys/param.h>
+#include <esp_log.h>
+
+static const char *TAG = "ASYNC_LOGGING";
+
+#ifndef CONFIG_ASYNC_LOGGING_BUFFER_LEN
+#define CONFIG_ASYNC_LOGGING_BUFFER_LEN 4096
+#endif
 
 #if CONFIG_ASYNC_LOGGING_ENABLED == 1
 

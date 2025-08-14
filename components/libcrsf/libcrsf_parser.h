@@ -1,11 +1,7 @@
-#ifndef LIBCRSF_PARSER
-#define LIBCRSF_PARSER
+#ifndef LIBCRSF_PARSER_H
+#define LIBCRSF_PARSER_H
 
-#include "libcrsf.h"
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
+#include "libcrsf_def.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,6 +1,6 @@
 #include <sdkconfig.h>
 
-#ifdef CONFIG_CRSF_FIRMWARE_RX
+#ifdef CONFIG_CRSF_MIM_FIRMWARE_RX
 
 #include <driver/uart.h>
 #include "freertos/FreeRTOS.h"

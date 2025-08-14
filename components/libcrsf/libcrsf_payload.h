@@ -1,10 +1,10 @@
 #ifndef LIBCRSF_PAYLOAD_H
 #define LIBCRSF_PAYLOAD_H
 
-#include "libcrsf.h"
-#include "libcrsf_device_param.h"
-
 #include <stdbool.h>
+
+#include "libcrsf_def.h"
+#include "libcrsf_device_param.h"
 
 #ifdef __cplusplus
 extern "C" {

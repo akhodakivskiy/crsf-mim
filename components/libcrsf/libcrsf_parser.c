@@ -1,8 +1,10 @@
 #include "libcrsf_parser.h"
-#include "libcrsf.h"
+
+#include "libcrsf_crc8.h"
 
 #include <esp_attr.h>
 #include <esp_log.h>
+#include <assert.h>
 
 static const char *TAG = "CRSF_PARSER";
 

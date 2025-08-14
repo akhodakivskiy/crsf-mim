@@ -1,10 +1,9 @@
 #include "libcrsf_payload.h"
-#include "libcrsf.h"
-#include "libcrsf_device_param.h"
+
+#include "libcrsf_crc8.h"
 
 #include <esp_log.h>
 #include <string.h>
-#include <stdio.h>
 #include <endian.h>
 
 static const char *TAG = "CRSF_PAYLOAD";

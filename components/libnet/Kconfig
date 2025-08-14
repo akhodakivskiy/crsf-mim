@@ -1,0 +1,21 @@
+menu "libnet"
+    # Ethernet hardware pins
+    config LIBNET_W5500_SPI_MISO
+        int "W5500 SPI MISO pin"
+        default 12
+    config LIBNET_W5500_SPI_MOSI
+        int "W5500 SPI MOSI pin"
+        default 11
+    config LIBNET_W5500_SPI_SCLK
+        int "W5500 SPI SCLK pin"
+        default 13
+    config LIBNET_W5500_SPI_CS
+        int "W5500 SPI CS pin"
+        default 14
+    config LIBNET_W5500_SPI_RST
+        int "W5500 SPI RST pin"
+        default 9
+    config LIBNET_W5500_SPI_INT
+        int "W5500 SPI INT pin"
+        default 10
+endmenu

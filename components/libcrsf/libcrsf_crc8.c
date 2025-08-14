@@ -1,4 +1,4 @@
-#include "libcrsf.h"
+#include "libcrsf_crc8.h"
 
 #include <esp_attr.h>
 #include <stdbool.h>

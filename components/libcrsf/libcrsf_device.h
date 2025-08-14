@@ -1,12 +1,11 @@
 #ifndef LIBCRSF_DEVICE_H
 #define LIBCRSF_DEVICE_H
 
-#include "libcrsf.h"
+#include "libcrsf_def.h"
 #include "libcrsf_payload.h"
 #include "libcrsf_device_param.h"
 
 #include <stdint.h>
-#include "freertos/idf_additions.h"
 
 #ifdef __cplusplus
 extern "C" {

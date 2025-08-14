@@ -1,12 +1,10 @@
 #include "libcrsf_device.h"
 
-#include "esp_app_desc.h"
-#include "libcrsf.h"
 #include "libcrsf_payload.h"
 #include "libcrsf_device_param.h"
 
-#include "esp_log.h"
-#include "esp_heap_caps.h"
+#include <esp_log.h>
+#include <esp_heap_caps.h>
 #include <string.h>
 
 static const char *TAG = "CRSF_DEVICE";

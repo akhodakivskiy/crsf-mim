@@ -1,124 +1,73 @@
 #include "mim_menu.h"
 
+#include "libnet.h"
+
+#include "mim_settings.h"
+
 #include "libcrsf.h"
 #include "libcrsf_device.h"
 #include "libcrsf_device_param.h"
 #include "libcrsf_payload.h"
 
+
+#include <stdint.h>
 #include <esp_log.h>
 #include <string.h>
+#include <lwip/ip4_addr.h>
+#include <esp_netif_ip_addr.h>
 
 #define MIM_CRSF_DEVICE_SERIAL 0x04423448
 
 static const char *TAG = "MENU";
 
-uint8_t u8 = 1;
-int8_t i8 = -2;
-uint16_t u16 = 300;
-int16_t i16 = -10;
-uint32_t u32 = 300;
-int32_t i32 = -10;
-int32_t flt = -500;
-const char *info = "info-value";
-
-uint8_t select_index = 0;
-
-void _param_folder_get(crsf_device_param_read_value_t *value) {
-    value->folder = "folder";
+void _param_info_link_get(crsf_device_param_read_value_t *value) {
+    value->info = libnet_is_connected() ? "up" : "down";
 }
 
-void _param_u8_get(crsf_device_param_read_value_t *value) {
-    value->u8.value = u8;
-    value->u8.value_min = 0;
-    value->u8.value_max = 10;
-    value->u8.units = "u";
+char _ip_address[16];
+void _param_info_ip_address(crsf_device_param_read_value_t *value) {
+    ip4_addr_t addr;
+    libnet_get_ip_address(&addr);
+    snprintf(_ip_address, 16, IPSTR, IP2STR(&addr));
+    value->info = _ip_address;
 }
 
-void _param_u8_set(const crsf_device_param_write_value_t *value) {
-    u8 = value->u8;
+void _param_u16_skymap_udp_port_get(crsf_device_param_read_value_t *value) {
+    value->u16.value = mim_settings_get()->skymap_udp_port;
+    value->u16.value_min = 0;
+    value->u16.value_max = UINT16_MAX;
+    value->u16.units = "";
 }
 
-void _param_i8_get(crsf_device_param_read_value_t *value) {
-    value->i8.value = i8;
-    value->i8.value_min = -10;
-    value->i8.value_max = 10;
-    value->i8.units = "i";
+void _param_u16_skymap_udp_port_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_skymap_udp_port(value->u16);
+    mim_settings_save();
 }
 
-void _param_i8_set(const crsf_device_param_write_value_t *value) {
-    i8 = value->i8;
+void _param_select_mode_get(crsf_device_param_read_value_t *value) {
+    value->select.index = mim_settings_get()->mode;
+    value->select.option_count = 2;
+    value->select.options[0] = "WiFi";
+    value->select.options[1] = "Ethernet";
+    value->select.units = "";
 }
 
-void _param_u16_get(crsf_device_param_read_value_t *value) {
-    value->u16.value = u16;
-    value->u16.value_min = 250;
-    value->u16.value_max = 300;
-    value->u16.units = "u";
-}
-
-void _param_u16_set(const crsf_device_param_write_value_t *value) {
-    u16 = value->u16;
-}
-
-void _param_i16_get(crsf_device_param_read_value_t *value) {
-    value->i16.value = i16;
-    value->i16.value_min = -20;
-    value->i16.value_max = 10;
-    value->i16.units = "i";
-}
-
-void _param_i16_set(const crsf_device_param_write_value_t *value) {
-    i16 = value->i16;
-}
-
-void _param_flt_get(crsf_device_param_read_value_t *value) {
-    value->flt.value = flt;
-    value->flt.value_min = -1000;
-    value->flt.value_max = 1000;
-    value->flt.decimal_places = 2;
-    value->flt.step = 5;
-    value->flt.units = "f";
-}
-
-void _param_flt_set(const crsf_device_param_write_value_t *value) {
-    flt = value->flt;
-}
-
-void _param_select_get(crsf_device_param_read_value_t *value) {
-    value->select.index = select_index;
-    value->select.option_count = 4;
-    value->select.options[0] = "1";
-    value->select.options[1] = "2";
-    value->select.options[2] = "3";
-    value->select.options[3] = "4";
-    value->select.units = "ch";
-}
-
-void _param_select_set(const crsf_device_param_write_value_t *value) {
-    select_index = value->select_index;
-}
-
-void _param_info_get(crsf_device_param_read_value_t *value) {
-    value->info = info;
+void _param_select_mode_set(const crsf_device_param_write_value_t *value) {
+    assert(value->select_index == 0 || value->select_index == 1);
+    mim_settings_set_mode((mim_settings_mode_t)value->select_index);
+    mim_settings_save();
 }
 
 void mim_menu_init(crsf_device_t *device) {
     crsf_device_init(device, CRSF_ADDRESS_CRSF_MIM, "crsf-mim", MIM_CRSF_DEVICE_SERIAL);
 
-    crsf_device_param_t *folder = crsf_device_add_param(device, "folder", CRSF_PARAM_TYPE_FOLDER, NULL, 
-                                                        _param_folder_get, NULL);
-    crsf_device_add_param(device, "u8", CRSF_PARAM_TYPE_UINT8, folder, 
-                          _param_u8_get, _param_u8_set);
-    crsf_device_add_param(device, "i8", CRSF_PARAM_TYPE_INT8, folder, 
-                          _param_i8_get, _param_i8_set);
-    crsf_device_add_param(device, "u16", CRSF_PARAM_TYPE_UINT16, folder, 
-                          _param_u16_get, _param_u16_set);
-    crsf_device_add_param(device, "i16", CRSF_PARAM_TYPE_INT16, folder, 
-                          _param_i16_get, _param_i16_set);
-    crsf_device_add_param(device, "flt", CRSF_PARAM_TYPE_FLOAT, NULL, 
-                          _param_flt_get, _param_flt_set);
-    crsf_device_add_param(device, "select", CRSF_PARAM_TYPE_SELECT, NULL, 
-                          _param_select_get, _param_select_set);
-    crsf_device_add_param(device, "info", CRSF_PARAM_TYPE_INFO, NULL, _param_info_get, NULL);
+    crsf_device_add_param(device, "link", CRSF_PARAM_TYPE_INFO, NULL, 
+                          _param_info_link_get, NULL);
+    crsf_device_add_param(device, "ip address", CRSF_PARAM_TYPE_INFO, NULL, 
+                          _param_info_ip_address, NULL);
+    crsf_device_add_param(device, "Skymap port", CRSF_PARAM_TYPE_UINT16, NULL, 
+                          _param_u16_skymap_udp_port_get, _param_u16_skymap_udp_port_set);
+    crsf_device_add_param(device, "mode", CRSF_PARAM_TYPE_SELECT, NULL, 
+                          _param_select_mode_get, _param_select_mode_set);
 }
 
