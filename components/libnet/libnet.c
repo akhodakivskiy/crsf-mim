@@ -70,15 +70,22 @@ esp_err_t libnet_init(const libnet_config_t* config) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    if (config->interface == LIBNET_INTERFACE_WIFI) {
-        ESP_ERROR_CHECK(init_wifi());
-    } else {
-        ESP_ERROR_CHECK(init_ethernet());
+    switch (config->interface) {
+        case LIBNET_INTERFACE_WIFI:
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, &ip_event_handler, NULL));
+            ESP_ERROR_CHECK(init_wifi());
+            ESP_LOGI(TAG, "Initialized with WiFi interface, ssid=%s", s_libnet_ctx.config.net.wifi.ssid);
+            break;
+        case LIBNET_INTERFACE_ETHERNET:
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &ip_event_handler, NULL));
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, &ip_event_handler, NULL));
+            ESP_ERROR_CHECK(init_ethernet());
+            ESP_LOGI(TAG, "Initialized with Ethernet interface");
+            break;
     }
 
     s_libnet_ctx.initialized = true;
-    ESP_LOGI(TAG, "Initialized with %s interface", 
-             config->interface == LIBNET_INTERFACE_WIFI ? "WiFi" : "Ethernet");
 
     return ESP_OK;
 }
@@ -90,8 +97,6 @@ static esp_err_t init_wifi(void) {
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &ip_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, &ip_event_handler, NULL));
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -176,8 +181,6 @@ static esp_err_t init_ethernet(void) {
     ESP_ERROR_CHECK(esp_netif_attach(s_libnet_ctx.netif, s_libnet_ctx.eth_glue_handle));
 
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &ip_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, &ip_event_handler, NULL));
 
     ESP_ERROR_CHECK(esp_eth_start(s_libnet_ctx.eth_handle));
 
@@ -305,22 +308,21 @@ void libnet_get_ip_address(ip4_addr_t *addr) {
 
 // Event handlers
 static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    static int retry_num = 0;
+    static uint16_t retry_num = 0;
     
     if (event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (retry_num < s_libnet_ctx.config.net.wifi.max_retry) {
-            esp_wifi_connect();
-            retry_num++;
-            ESP_LOGI(TAG, "Retry to connect to AP");
-        } else {
-            ESP_LOGI(TAG, "Connect to AP failed");
+        esp_wifi_connect();
+        retry_num++;
+        ESP_LOGI(TAG, "Connecting to AP, retry #%u", retry_num);
+
+        if (s_libnet_ctx.connected) {
             if (s_libnet_ctx.config.callbacks.connected) {
                 s_libnet_ctx.config.callbacks.disconnected();
             }
+            s_libnet_ctx.connected = false;
         }
-        s_libnet_ctx.connected = false;
         ip4_addr_set_u32(&s_libnet_ctx.ip_address, 0);
     }
 }

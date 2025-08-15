@@ -1,4 +1,5 @@
 #include "mim_settings.h"
+#include "sdkconfig.h"
 
 #define SETTINGS_NAMESPACE "mim_settings"
 #define SETTINGS_KEY "mim_config"
@@ -15,8 +16,8 @@ static bool mim_settings_initialized = false;
 
 static const mim_settings_t mim_settings_default = {
     .mode = MIM_SETTINGS_MODE_ETHERNET,
-    .wifi_ssid = "",
-    .wifi_password = "",
+    .wifi_ssid = CONFIG_CRSF_MIM_WIFI_SSID,
+    .wifi_password = CONFIG_CRSF_MIM_WIFI_PASSWORD,
     .skymap_udp_port = 8888,
 };
 

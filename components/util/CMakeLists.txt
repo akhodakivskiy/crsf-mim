@@ -1,5 +1,6 @@
 idf_component_register(
     SRCS 
-        "lqcalc.c"
+        "util_lqcalc.c"
+        "util.c"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_gpio)
+    REQUIRES)

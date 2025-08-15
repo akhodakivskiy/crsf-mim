@@ -49,6 +49,38 @@ uint64_t _last_crsf_period_us;
 
 crsf_device_t crsf_device;
 
+void udp_on_connected(ip4_addr_t *addr) {
+}
+
+void udp_on_disconnected() {
+}
+
+void udp_on_packet(uint8_t *data, uint16_t len, ip4_addr_t *arrd, uint16_t port) {
+}
+
+void _setup_libnet() {
+    libnet_config_t libnet_cfg = {0};
+
+    libnet_cfg.core_id = PRO_CPU_NUM;
+    libnet_cfg.callbacks.connected = udp_on_connected;
+    libnet_cfg.callbacks.disconnected = udp_on_disconnected;
+    libnet_cfg.callbacks.packet = udp_on_packet;
+
+    switch (mim_settings_get()->mode) {
+        case MIM_SETTINGS_MODE_ETHERNET:
+            libnet_cfg.interface = LIBNET_INTERFACE_ETHERNET;
+            break;
+        case MIM_SETTINGS_MODE_WIFI:
+            libnet_cfg.interface = LIBNET_INTERFACE_WIFI;
+            strncpy(libnet_cfg.net.wifi.ssid, mim_settings_get()->wifi_ssid, sizeof(libnet_cfg.net.wifi.ssid));
+            strncpy(libnet_cfg.net.wifi.password, mim_settings_get()->wifi_password, sizeof(libnet_cfg.net.wifi.password));
+            break;
+    }
+
+    libnet_init(&libnet_cfg);
+    libnet_udp_server_start(8888);
+}
+
 /*
 static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *event, void *user_ctx) {
     ESP_ERROR_CHECK(gptimer_stop(timer));
@@ -256,41 +288,18 @@ static void _task_module(void *arg) {
     }
 }
 
-void udp_on_connected(ip4_addr_t *addr) {
-}
-
-void udp_on_disconnected() {
-}
-
-void udp_on_packet(uint8_t *data, uint16_t len, ip4_addr_t *arrd, uint16_t port) {
-}
-
 void app_main(void) {
     async_logging_init(PRO_CPU_NUM);
 
     mim_settings_init();
+    mim_settings_load();
+
+    mim_menu_init(&crsf_device);
+
+    _setup_libnet();
 
     queue_crsf_controller = xQueueCreate(10, sizeof(crsf_frame_t));
     queue_crsf_module = xQueueCreate(10, sizeof(crsf_frame_t));
-
-    libnet_config_t libnet_cfg = {
-        .core_id = PRO_CPU_NUM,
-        .callbacks = {
-            .connected = udp_on_connected,
-            .disconnected = udp_on_disconnected,
-            .packet = udp_on_packet,
-        },
-        .interface = LIBNET_INTERFACE_ETHERNET,
-        .net = {
-            .eth = {}
-        },
-    };
-
-    libnet_init(&libnet_cfg);
-
-    libnet_udp_server_start(8888);
-
-    mim_menu_init(&crsf_device);
 
     assert(xTaskCreatePinnedToCore(_task_module, "module", 4096, NULL, configMAX_PRIORITIES - 2, &task_module, APP_CPU_NUM) == pdPASS);
     vTaskDelay(10);

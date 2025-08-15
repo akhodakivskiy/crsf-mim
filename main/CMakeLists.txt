@@ -9,6 +9,7 @@ idf_component_register(
   INCLUDE_DIRS "."
   REQUIRES 
     async_logging
+    util
     libcrsf 
     libnet 
     esp_driver_gptimer 

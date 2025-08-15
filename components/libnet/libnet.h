@@ -14,8 +14,8 @@ extern "C" {
 #define LIBNET_MAX_CLIENTS 5
 
 typedef enum {
-    LIBNET_INTERFACE_WIFI,
-    LIBNET_INTERFACE_ETHERNET
+    LIBNET_INTERFACE_WIFI = 0,
+    LIBNET_INTERFACE_ETHERNET = 1
 } libnet_interface_t;
 
 typedef enum {
@@ -28,7 +28,6 @@ typedef enum {
 typedef struct {
     char ssid[32];
     char password[64];
-    int max_retry;
 } libnet_wifi_config_t;
 
 typedef struct {

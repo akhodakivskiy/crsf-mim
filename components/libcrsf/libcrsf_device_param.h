@@ -1,6 +1,7 @@
 #ifndef LIBCRSF_DEVICE_PARAM_H
 #define LIBCRSF_DEVICE_PARAM_H
 
+#include "libcrsf_def.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -67,7 +68,7 @@ typedef union {
     struct {
         uint8_t index;
         uint8_t option_count;
-        const char *options[CRSF_DEVICE_PARAM_SELECT_MAX_OPTION_COUNT];
+        const char *options[CRSF_DEVICE_PARAM_SELECT_OPTION_MAX_COUNT];
         const char *units;
     } select;
     const char *info;

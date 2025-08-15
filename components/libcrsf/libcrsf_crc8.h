@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-uint8_t crsf_calc_crc8(crsf_frame_t *frame);
+uint8_t crsf_calc_crc8(const crsf_frame_t *frame);
 
 #ifdef __cplusplus
 }

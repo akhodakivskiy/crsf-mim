@@ -5,4 +5,5 @@ idf_component_register(
         "libcrsf_parser.c" 
         "libcrsf_payload.c" 
     INCLUDE_DIRS "."
-    REQUIRES esp_timer)
+    REQUIRES 
+        esp_timer)

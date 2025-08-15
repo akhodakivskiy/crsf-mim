@@ -46,7 +46,7 @@ uint8_t IRAM_ATTR _crsf_calc_crc8_all(const uint8_t *data, uint16_t len, uint8_t
     return crc;
 }
 
-uint8_t IRAM_ATTR crsf_calc_crc8(crsf_frame_t *frame) {
+uint8_t IRAM_ATTR crsf_calc_crc8(const crsf_frame_t *frame) {
     uint8_t crc = _crsf_calc_crc8_one(frame->type, 0);
     return _crsf_calc_crc8_all(frame->data, frame->length - 2, crc); // - type - crc
 }
