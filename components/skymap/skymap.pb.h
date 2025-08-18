@@ -94,7 +94,7 @@ typedef struct _ai_skyfortress_guidance_ServerMessage {
         ai_skyfortress_guidance_TargetEstimate target_estimate;
         ai_skyfortress_guidance_TargetEstimate interceptor_estimate;
         ai_skyfortress_guidance_RawData target_raw;
-        ai_skyfortress_guidance_RawData target_interceptor;
+        ai_skyfortress_guidance_RawData interceptor_raw;
     } message;
 } ai_skyfortress_guidance_ServerMessage;
 
@@ -193,7 +193,7 @@ extern "C" {
 #define ai_skyfortress_guidance_ServerMessage_target_estimate_tag 2
 #define ai_skyfortress_guidance_ServerMessage_interceptor_estimate_tag 3
 #define ai_skyfortress_guidance_ServerMessage_target_raw_tag 4
-#define ai_skyfortress_guidance_ServerMessage_target_interceptor_tag 5
+#define ai_skyfortress_guidance_ServerMessage_interceptor_raw_tag 5
 #define ai_skyfortress_guidance_ClientStatus_state_tag 1
 #define ai_skyfortress_guidance_ClientStatus_position_tag 2
 #define ai_skyfortress_guidance_ClientMessage_status_tag 1
@@ -270,14 +270,14 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (message,ping,message.ping),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (message,target_estimate,message.target_estimate),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (message,interceptor_estimate,message.interceptor_estimate),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (message,target_raw,message.target_raw),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (message,target_interceptor,message.target_interceptor),   5)
+X(a, STATIC,   ONEOF,    MESSAGE,  (message,interceptor_raw,message.interceptor_raw),   5)
 #define ai_skyfortress_guidance_ServerMessage_CALLBACK NULL
 #define ai_skyfortress_guidance_ServerMessage_DEFAULT NULL
 #define ai_skyfortress_guidance_ServerMessage_message_ping_MSGTYPE ai_skyfortress_guidance_Ping
 #define ai_skyfortress_guidance_ServerMessage_message_target_estimate_MSGTYPE ai_skyfortress_guidance_TargetEstimate
 #define ai_skyfortress_guidance_ServerMessage_message_interceptor_estimate_MSGTYPE ai_skyfortress_guidance_TargetEstimate
 #define ai_skyfortress_guidance_ServerMessage_message_target_raw_MSGTYPE ai_skyfortress_guidance_RawData
-#define ai_skyfortress_guidance_ServerMessage_message_target_interceptor_MSGTYPE ai_skyfortress_guidance_RawData
+#define ai_skyfortress_guidance_ServerMessage_message_interceptor_raw_MSGTYPE ai_skyfortress_guidance_RawData
 
 #define ai_skyfortress_guidance_ClientStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    state,             1) \

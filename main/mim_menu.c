@@ -4,6 +4,7 @@
 
 #include "mim_settings.h"
 
+#include "skymap.h"
 #include "util.h"
 
 #include "libcrsf.h"
@@ -21,6 +22,35 @@
 #define MIM_CRSF_DEVICE_SERIAL 0x04423448
 
 static const char *TAG = "MENU";
+
+static skymap_t *_skymap = NULL;
+
+void _param_select_engage_channel_get(crsf_device_param_read_value_t *value) {
+    uint8_t channel = mim_settings_get()->engage_channel;
+    assert(channel >= 5 && channel <= 16);
+
+    value->select.index = channel - 5;
+    value->select.option_count = 12;
+    value->select.options[0] = "5";
+    value->select.options[1] = "6";
+    value->select.options[2] = "7";
+    value->select.options[3] = "8";
+    value->select.options[4] = "9";
+    value->select.options[5] = "10";
+    value->select.options[6] = "11";
+    value->select.options[7] = "12";
+    value->select.options[8] = "13";
+    value->select.options[9] = "14";
+    value->select.options[10] = "15";
+    value->select.options[11] = "16";
+    value->select.units = "RC chan";
+}
+
+void _param_select_engage_channel_set(const crsf_device_param_write_value_t *value) {
+    assert(value->select_index < 12);
+
+    mim_settings_set_engage_channel(value->select_index + 5);
+}
 
 void _param_select_mode_get(crsf_device_param_read_value_t *value) {
     value->select.index = mim_settings_get()->mode;
@@ -79,3 +109,6 @@ void mim_menu_init(crsf_device_t *device) {
                           _param_u16_skymap_udp_port_get, _param_u16_skymap_udp_port_set);
 }
 
+void mim_menu_set_skymap(skymap_t *sm) {
+    _skymap = sm;
+}

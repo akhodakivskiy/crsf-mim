@@ -34,9 +34,9 @@ typedef struct {
     uint8_t dummy;
 } libnet_ethernet_config_t;
 
-typedef void (*libnet_callback_connected_t)(ip4_addr_t *ip);
-typedef void (*libnet_callback_disconnected_t)();
-typedef void (*libnet_callback_packet_t)(uint8_t* data, uint16_t len, ip4_addr_t *ip, uint16_t port);
+typedef void (*libnet_callback_connected_t)(void *user_ctx, ip4_addr_t *addr);
+typedef void (*libnet_callback_disconnected_t)(void *user_ctx);
+typedef void (*libnet_callback_packet_t)(void *user_ctx, uint8_t* data, uint16_t len, ip4_addr_t *addr_from, uint16_t port);
 
 typedef struct {
     BaseType_t core_id;
@@ -50,6 +50,7 @@ typedef struct {
         libnet_wifi_config_t wifi;
         libnet_ethernet_config_t eth;
     } net;
+    void *user_ctx;
 } libnet_config_t;
 
 // Core functions

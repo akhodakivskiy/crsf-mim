@@ -318,8 +318,8 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "Connecting to AP, retry #%u", retry_num);
 
         if (s_libnet_ctx.connected) {
-            if (s_libnet_ctx.config.callbacks.connected) {
-                s_libnet_ctx.config.callbacks.disconnected();
+            if (s_libnet_ctx.config.callbacks.disconnected) {
+                s_libnet_ctx.config.callbacks.disconnected(s_libnet_ctx.config.user_ctx);
             }
             s_libnet_ctx.connected = false;
         }
@@ -335,7 +335,7 @@ static void eth_event_handler(void* arg, esp_event_base_t event_base, int32_t ev
         s_libnet_ctx.connected = false;
         ip4_addr_set_u32(&s_libnet_ctx.ip_address, 0);
         if (s_libnet_ctx.config.callbacks.disconnected) {
-            s_libnet_ctx.config.callbacks.disconnected();
+            s_libnet_ctx.config.callbacks.disconnected(s_libnet_ctx.config.user_ctx);
         }
     }
 }
@@ -349,7 +349,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base, int32_t eve
             s_libnet_ctx.connected = true;
             ip4_addr_set_u32(&s_libnet_ctx.ip_address, event->ip_info.ip.addr);
             if (s_libnet_ctx.config.callbacks.connected) {
-                s_libnet_ctx.config.callbacks.connected(&s_libnet_ctx.ip_address);
+                s_libnet_ctx.config.callbacks.connected(s_libnet_ctx.config.user_ctx, &s_libnet_ctx.ip_address);
             }
             break;
         }
@@ -359,7 +359,7 @@ static void ip_event_handler(void* arg, esp_event_base_t event_base, int32_t eve
             s_libnet_ctx.connected = false;
             ip4_addr_set_u32(&s_libnet_ctx.ip_address, 0);
             if (s_libnet_ctx.config.callbacks.disconnected) {
-                s_libnet_ctx.config.callbacks.disconnected();
+                s_libnet_ctx.config.callbacks.disconnected(s_libnet_ctx.config.user_ctx);
             }
             break;
         }
@@ -392,10 +392,10 @@ static void udp_server_task(void* arg) {
             ip4_addr_set_u32(&ip, client_addr.sin_addr.s_addr);
             uint16_t port = ntohs(client_addr.sin_port);
 
-            ESP_LOGI(TAG, "Received %d bytes from " IPSTR ": %u", packet_len, IP2STR(&ip), port);
+            //ESP_LOGI(TAG, "Received %d bytes from " IPSTR ": %u", packet_len, IP2STR(&ip), port);
 
             if (s_libnet_ctx.config.callbacks.packet) {
-                s_libnet_ctx.config.callbacks.packet(packet_data, packet_len, &ip, port);
+                s_libnet_ctx.config.callbacks.packet(s_libnet_ctx.config.user_ctx, packet_data, packet_len, &ip, port);
             }
         } else if (packet_len < 0 && errno != EAGAIN) {
             ESP_LOGE(TAG, "UDP receive error: %d", errno);

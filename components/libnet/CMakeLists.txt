@@ -7,3 +7,5 @@ idf_component_register(
         esp_eth
         nvs_flash
 )
+
+#target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLOG_LOCAL_LEVEL=ESP_LOG_NONE")

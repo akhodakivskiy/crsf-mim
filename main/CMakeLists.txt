@@ -2,8 +2,8 @@ idf_component_register(
   SRCS 
     "mim_menu.c" 
     "mim_uart.c"
-    "mim_skymap.c"
     "mim_settings.c"
+    "mim_skymap.c"
     "main_rx.c" 
     "main_tx.c" 
   INCLUDE_DIRS "."

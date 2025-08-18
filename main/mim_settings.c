@@ -1,4 +1,5 @@
 #include "mim_settings.h"
+#include "esp_err.h"
 #include "sdkconfig.h"
 
 #define SETTINGS_NAMESPACE "mim_settings"
@@ -137,6 +138,19 @@ esp_err_t mim_settings_set_skymap_udp_port(uint16_t port) {
     }
 
     mim_settings_current.skymap_udp_port = port;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_engage_channel(uint8_t channel) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (channel < 5 || channel > 16) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    mim_settings_current.engage_channel = channel;
     return ESP_OK;
 }
 
