@@ -83,7 +83,6 @@ static void _task_skymap_impl(void *arg) {
     libnet_init(&libnet_cfg);
     libnet_udp_server_start(8888);
 
-    static int64_t last_log_time = 0;
     while(true) {
         if (_skymap_ctx.skymap.is_client_message_ready) {
             uint8_t data[ai_skyfortress_guidance_ClientMessage_size + 4];
@@ -95,11 +94,6 @@ static void _task_skymap_impl(void *arg) {
             }
         } else {
             skymap_update(&_skymap_ctx.skymap, esp_timer_get_time());
-        }
-
-        if (esp_timer_get_time() - last_log_time > 1000000) {
-            ESP_LOGI(TAG, "skymap connected: %u, ready=%u", _skymap_ctx.skymap.is_connected, _skymap_ctx.skymap.is_ready_to_engage);
-            last_log_time = esp_timer_get_time();
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));

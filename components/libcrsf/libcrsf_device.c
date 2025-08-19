@@ -137,16 +137,12 @@ crsf_device_result_t crsf_device_client_handler(crsf_device_t *device, const crs
     switch (frame_in->type) {
         case CRSF_FRAME_TYPE_DEVICE_PING: {
             if (frame_in->is_extended && (frame_in->dest == device->address || frame_in->dest == CRSF_ADDRESS_BROADCAST)) {
-                //ESP_LOGI(TAG, "ping> sync=%x, type=%x, length=%u, dest=%x, source=%x", frame_in->sync, frame_in->type, frame_in->length, frame_in->source, frame_in->dest);
-                //ESP_LOG_BUFFER_HEX(TAG, frame_in->data, frame_in->length - 1);
                 crsf_payload_device_info_t info;
                 memset(&info, 0, sizeof(crsf_payload_device_info_t));
                 result = crsf_device_handle__ping(device, frame_in, &info); 
 
                 if (result == CRSF_DEVICE_RESULT_OK) {
                     crsf_payload_pack__device_info(frame_out, &info);
-                    //ESP_LOGI(TAG, "<info sync=%x, type=%x, length=%u, dest=%x, source=%x", frame_out->sync, frame_out->type, frame_out->length, frame_out->source, frame_out->dest);
-                    //ESP_LOG_BUFFER_HEX(TAG, frame_out->data, frame_out->length - 1);
                 }
 
             }
@@ -155,21 +151,15 @@ crsf_device_result_t crsf_device_client_handler(crsf_device_t *device, const crs
         case CRSF_FRAME_TYPE_PARAM_READ:
             if (frame_in->is_extended && frame_in->dest == device->address) {
                 crsf_payload_device_param_read_t read;
-                crsf_payload_unpack__param_read(frame_in, &read);
+                if (crsf_payload_unpack__param_read(frame_in, &read)) {
 
-                crsf_payload_device_param_entry_t entry;
-                memset(&entry, 0, sizeof(crsf_payload_device_param_entry_t));
-                result = crsf_device_handle__param_read(device, &read, &entry);
+                    crsf_payload_device_param_entry_t entry;
+                    memset(&entry, 0, sizeof(crsf_payload_device_param_entry_t));
+                    result = crsf_device_handle__param_read(device, &read, &entry);
 
-                //ESP_LOGI(TAG, "read> dest=%x, source=%x, len=%u, index=%u, chunk=%u", frame_in->source, frame_in->dest, frame_in->length, read.index, read.chunk_index);
-                //ESP_LOG_BUFFER_HEX(TAG, frame_in->data, frame_in->length - 1);
-
-                if (result == CRSF_DEVICE_RESULT_OK) {
-                    crsf_payload_pack__param_entry(frame_out, &entry);
-                    //ESP_LOGI(TAG, "<entry dest=%x, source=%x, len=%u, name=%s, index=%u, parent=%u, type=%u", 
-                             //frame_out->source, frame_out->dest, frame_out->length,
-                             //entry.name, entry.index, entry.parent_index, entry.type);
-                    //ESP_LOG_BUFFER_HEX(TAG, frame_out->data, frame_out->length - 1);
+                    if (result == CRSF_DEVICE_RESULT_OK) {
+                        crsf_payload_pack__param_entry(frame_out, &entry);
+                    }
                 }
             }
             break;
@@ -181,21 +171,15 @@ crsf_device_result_t crsf_device_client_handler(crsf_device_t *device, const crs
 
                 crsf_device_param_t *param = crsf_device_get_param(device, write.index);
                 // now unpack parameter value
-                crsf_payload_unpack__param_write_value(frame_in, &write, param->type);
+                if (crsf_payload_unpack__param_write_value(frame_in, &write, param->type)) {
 
-                crsf_payload_device_param_entry_t entry;
-                memset(&entry, 0, sizeof(crsf_payload_device_param_entry_t));
-                result = crsf_device_handle__param_write(device, &write, &entry);
+                    crsf_payload_device_param_entry_t entry;
+                    memset(&entry, 0, sizeof(crsf_payload_device_param_entry_t));
+                    result = crsf_device_handle__param_write(device, &write, &entry);
 
-                //ESP_LOGI(TAG, "write> dest=%x, source=%x, len=%u, index=%u", frame_in->dest, frame_in->source, frame_in->length, write.index);
-                //ESP_LOG_BUFFER_HEX(TAG, frame_in->data, frame_in->length - 1);
-
-                if (result == CRSF_DEVICE_RESULT_OK) {
-                    crsf_payload_pack__param_entry(frame_out, &entry);
-                    //ESP_LOGI(TAG, "<entry dest=%x, source=%x, len=%u, name=%s, index=%u, parent=%u, type=%u", 
-                             //frame_out->source, frame_out->dest, frame_in->length,
-                             //entry.name, entry.index, entry.parent_index, entry.type);
-                    //ESP_LOG_BUFFER_HEX(TAG, frame_out->data, frame_out->length - 1);
+                    if (result == CRSF_DEVICE_RESULT_OK) {
+                        crsf_payload_pack__param_entry(frame_out, &entry);
+                    }
                 }
             }
             break;

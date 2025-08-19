@@ -108,7 +108,7 @@ static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
             }
         }
 
-        ESP_LOGI(TAG, "%s: %s", counter->name, log);
+        //ESP_LOGI(TAG, "%s: %s", counter->name, log);
     }
 }
 

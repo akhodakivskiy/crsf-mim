@@ -1,6 +1,7 @@
 #include "libcrsf_payload.h"
 
 #include "libcrsf_crc8.h"
+#include "libcrsf_def.h"
 
 #include <esp_log.h>
 #include <string.h>
@@ -8,27 +9,37 @@
 
 static const char *TAG = "CRSF_PAYLOAD";
 
-void crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
-    assert(frame->type == CRSF_FRAME_TYPE_PARAM_READ);
-    assert(frame->length == CRSF_PAYLOAD_LENGTH_PARAM_READ);
-    assert(frame->is_extended);
+bool crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
+    if ((frame->type == CRSF_FRAME_TYPE_PARAM_READ) &&
+        (frame->length == CRSF_PAYLOAD_LENGTH_PARAM_READ) &&
+        (frame->is_extended)) {
 
-    payload->dest = frame->dest;
-    payload->source = frame->source;
-    payload->index = frame->data[2];
-    payload->chunk_index = frame->data[3];
+        payload->dest = frame->dest;
+        payload->source = frame->source;
+        payload->index = frame->data[2];
+        payload->chunk_index = frame->data[3];
+
+        return true;
+    }
+
+    return false;
 }
 
-void crsf_payload_unpack__param_write_header(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload) {
-    assert(frame->type == CRSF_FRAME_TYPE_PARAM_WRITE);
+bool crsf_payload_unpack__param_write_header(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_PARAM_WRITE) {
 
-    payload->dest = frame->data[0];
-    payload->source = frame->data[1];
-    payload->index = frame->data[2];
-    payload->type = CRSF_PARAM_TYPE_OUT_OF_RANGE;
+        payload->dest = frame->data[0];
+        payload->source = frame->data[1];
+        payload->index = frame->data[2];
+        payload->type = CRSF_PARAM_TYPE_OUT_OF_RANGE;
+
+        return true;
+    }
+
+    return false;
 }
 
-void crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload, crsf_device_param_type_t type) {
+bool crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload, crsf_device_param_type_t type) {
     payload->type = type;
 
     const uint8_t *ptr = frame->data + 3;
@@ -59,24 +70,42 @@ void crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payl
             break;
         case CRSF_PARAM_TYPE_COMMAND:
             ESP_LOGE(TAG, "COMMAND not implemented");
-            assert(false);
+            return false;
         case CRSF_PARAM_TYPE_FOLDER:
             break;
         case CRSF_PARAM_TYPE_INFO:
             ESP_LOGE(TAG, "FOLDER and INFO are not editable");
-            assert(false);
+            return false;
         case CRSF_PARAM_TYPE_STRING:
             ESP_LOGE(TAG, "expresslrs doesn't support editing strings");
-            assert(false);
+            return false;
         case CRSF_PARAM_TYPE_VTX:
             ESP_LOGE(TAG, "VTX control not implemented");
-            assert(false);
+            return false;
         case CRSF_PARAM_TYPE_UINT64:
         case CRSF_PARAM_TYPE_INT64:
         default:
             ESP_LOGE(TAG, "type=%u, expresslrs doesn't support 32 and 64 bit numbers", payload->type);
-            assert(false);
+            return false;
     }
+
+    return true;
+}
+
+bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payload_timing_correction_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_RADIO_ID) {
+        uint8_t subtype = frame->data[2];
+        if ((subtype == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) && frame->length == 13) {
+            payload->dest = frame->data[0];
+            payload->source = frame->data[1];
+            payload->interval_100ns = be32toh(*(uint32_t *)(frame->data + 3));
+            payload->offset_100ns = (int32_t)be32toh(*(uint32_t *)(frame->data + 7));
+
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
@@ -219,4 +248,16 @@ void crsf_payload_pack__param_entry(crsf_frame_t *frame,
 
     frame->length = i + 2; // payload + type + crc
     frame->data[frame->length - 2] = crsf_calc_crc8(frame);
+}
+
+bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns) {
+    if ((frame->type == CRSF_FRAME_TYPE_RADIO_ID) &&
+        (frame->data[2] == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) &&
+        (frame->length == 13)) {
+        *(uint32_t *)(frame->data + 3) = htobe32(interval_100ns);
+        *(uint32_t *)(frame->data + 7) = htobe32((uint32_t)offset_100ns);
+
+        return true;
+    }
+    return false;
 }

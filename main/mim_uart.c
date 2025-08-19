@@ -1,14 +1,14 @@
 #include "mim_uart.h"
 
 #include "driver/uart.h"
-#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "hal/uart_types.h"
 #include "libcrsf.h"
 #include "libcrsf_def.h"
 #include "libcrsf_def.h"
-#include "portmacro.h"
+#include "libcrsf_payload.h"
 #include "soc/gpio_num.h"
+#include "util.h"
 #include "util_lqcalc.h"
 
 #include <hal/uart_ll.h>
@@ -16,11 +16,13 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 
-#define CRSF_BAUDRATE 400000
-
 static const char *TAG= "MIM_UART";
 static const char *TAG_CONTROLLER = "MIM_UART_CONTROLLER";
 static const char *TAG_MODULE = "MIM_UART_MODULE";
+
+#define MIM_UART_WDT_TIMEOUT 1000000 // 1 second
+#define MIM_UART_AUTOBAUD_TIMEOUT 500000 // 500 milliseconds
+static const int32_t MIM_UART_BAUD_RATES[] = {400000, 115200, 5250000, 3750000, 1870000, 921600, 2250000};
 
 bool _is_init = false;
 
@@ -28,7 +30,6 @@ gpio_num_t _pin_controller = GPIO_NUM_NC;
 uart_port_t _port_controller = UART_NUM_MAX;
 QueueHandle_t _queue_uart_controller = NULL;
 QueueHandle_t _queue_crsf_controller = NULL;
-util_lqcalc_t _lq = {0};
 TaskHandle_t _task_controller = NULL;
 
 mim_uart_handler _handler_controller = NULL;
@@ -40,6 +41,11 @@ QueueHandle_t _queue_uart_module = NULL;
 QueueHandle_t _queue_crsf_module = NULL;
 TaskHandle_t _task_module = NULL;
 
+util_lqcalc_t _lq = {0};
+int64_t _last_uart_wdt_time = 0;
+int64_t _autobaud_start_time = 0;
+uint8_t _autobaud_current_idx = 0;
+
 static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue);
 static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin);
 static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin);
@@ -47,6 +53,8 @@ static bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_
 static void _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
 static void _task_controller_impl(void *arg);
 static void _task_module_impl(void *arg);
+static void _uart_wdt();
+static uint32_t _autobaud();
 
 void mim_uart_init(uart_port_t port_controller, gpio_num_t pin_controller,
                     uart_port_t port_module, gpio_num_t pin_module) {
@@ -84,7 +92,7 @@ void mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
 
 static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {
     uart_config_t cfg = {
-        .baud_rate = CRSF_BAUDRATE,
+        .baud_rate = MIM_UART_BAUD_RATES[_autobaud_current_idx],
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -180,6 +188,9 @@ static void _task_controller_impl(void *arg) {
 
     _uart_half_duplex_set_rx(_port_controller, _pin_controller);
 
+    util_lqcalc_init(&_lq, 100);
+    util_lqcalc_reset_100(&_lq);
+
     bool is_frame_ready = false;
     crsf_frame_t frame;
     uart_event_t event;
@@ -187,18 +198,24 @@ static void _task_controller_impl(void *arg) {
     ESP_LOGI(TAG_CONTROLLER, "controller task started");
 
     while (true) {
-        if (xQueueReceive(_queue_uart_controller, &event, portMAX_DELAY) == pdPASS) {
+        _uart_wdt(_port_controller, _pin_controller);
+
+        util_lqcalc_prepare(&_lq);
+
+        if (xQueueReceive(_queue_uart_controller, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
             if (event.type == UART_DATA) {
                 is_frame_ready = _uart_read_crsf_frame(TAG_CONTROLLER, _port_controller, &frame);
 
                 if (is_frame_ready) {
+                    util_lqcalc_receive(&_lq);
+
                     if (_handler_controller != NULL) {
                         _handler_controller(&frame);
                     }
 
-                    assert(xQueueOverwrite(_queue_crsf_controller, &frame) == pdPASS);
+                    assert(xQueueOverwrite(_queue_crsf_controller, &frame) == pdTRUE);
 
-                    if (xQueueReceive(_queue_crsf_module, &frame, 0) == pdPASS) {
+                    if (xQueueReceive(_queue_crsf_module, &frame, 0) == pdTRUE) {
                         if (_handler_module != NULL) {
                             _handler_module(&frame);
                         }
@@ -209,10 +226,10 @@ static void _task_controller_impl(void *arg) {
                         xQueueReset(_queue_uart_controller);
                     }
                 } else {
-                    ESP_LOGE(TAG_CONTROLLER, "failed to parse controller frame");
+                    //ESP_LOGE(TAG_CONTROLLER, "failed to parse controller frame");
                 }
             } else {
-                ESP_LOGE(TAG_CONTROLLER, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller, event.size, event.timeout_flag);
+                //ESP_LOGE(TAG_CONTROLLER, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller, event.size, event.timeout_flag);
             }
         }
     }
@@ -227,24 +244,138 @@ static void _task_module_impl(void *arg) {
     crsf_frame_t frame;
     uart_event_t event;
 
+    uint32_t interval_us = (1000 / 250) * 1000; // default rate for 400k baud is 250HZ
+
     ESP_LOGI(TAG, "module task started");
 
     while (true) {
-        if (xQueueReceive(_queue_crsf_controller, &frame, portMAX_DELAY) == pdPASS) {
+        if (xQueueReceive(_queue_crsf_controller, &frame, portMAX_DELAY) == pdTRUE) {
+            int64_t time_start = esp_timer_get_time();
+
             _uart_half_duplex_set_tx(_port_module, _pin_module);
             _uart_write_crsf_frame(_port_module, &frame);
             _uart_half_duplex_set_rx(_port_module, _pin_module);
             xQueueReset(_queue_uart_module);
 
-            if (xQueueReceive(_queue_uart_module, &event, pdMS_TO_TICKS(4)) == pdPASS) {
+            int64_t time_rx = esp_timer_get_time();
+            int64_t period_remaining_ms = (interval_us - (time_rx - time_start)) / 1000;
+
+            //ESP_LOGI(TAG_MODULE, "period_remaining=%lli, ticks=%lu", period_remaining_ms, pdMS_TO_TICKS(period_remaining_ms));
+
+            if (xQueueReceive(_queue_uart_module, &event, pdMS_TO_TICKS(period_remaining_ms > 0 ? period_remaining_ms : 1)) == pdTRUE) {
                 if (event.type == UART_DATA) {
                     is_frame_ready = _uart_read_crsf_frame(TAG_MODULE, _port_module, &frame);
 
                     if (is_frame_ready) {
-                        assert(xQueueSend(_queue_crsf_module, &frame, 0) == pdPASS);
+                        crsf_payload_timing_correction_t payload;
+                        if ((frame.type == CRSF_FRAME_TYPE_RADIO_ID) &&
+                            (crsf_payload_unpack__timing_correction(&frame, &payload))) {
+                            interval_us = payload.interval_100ns / 10;
+                            //ESP_LOGI(TAG_MODULE, "tining connection, period=%lu, offset=%li", payload.interval_100ns / 10, payload.offset_100ns / 10);
+                        }
+                        assert(xQueueSend(_queue_crsf_module, &frame, 0) == pdTRUE);
                     }
+                } else {
+                    //ESP_LOGI(TAG_MODULE, "unhandled uart event=%u", event.type);
                 }
             }
         }
     }
 }
+
+static void _uart_wdt() {
+    int64_t time = esp_timer_get_time();
+    uint8_t lq = util_lqcalc_get_lq(&_lq);
+
+    //ESP_LOGI(TAG, "uart wdt on port=%u, pin=%u, lq=%u, time=%llu, last_wdt_time=%llu", port, pin, util_lqcalc_get_lq(&_lq), time, _last_uart_wdt_time);
+    if (time - _last_uart_wdt_time < MIM_UART_WDT_TIMEOUT) {
+        return;
+    } 
+
+    if (lq < 50) {
+        uint32_t baud = _autobaud();
+        if (baud > 0) {
+            uint32_t best_baud = baud;
+            uint32_t best_diff = UINT32_MAX;
+
+            for (int i = 0; i < ARRAY_LENGTH(MIM_UART_BAUD_RATES); i++) {
+                uint32_t diff = abs((int32_t)MIM_UART_BAUD_RATES[i] - (int32_t)baud);
+                if (diff < best_diff) {
+                    best_baud = MIM_UART_BAUD_RATES[i];
+                    best_diff = diff;
+                }
+            }
+
+            ESP_LOGI(TAG, "baud rate detected at %lu, nearest %lu", baud, best_baud);
+
+            baud = best_baud;
+
+            uart_set_baudrate(_port_controller, baud);
+            _uart_half_duplex_set_rx(_port_controller, _pin_controller);
+            uart_set_baudrate(_port_module, baud);
+            _uart_half_duplex_set_rx(_port_module, _pin_module);
+
+            util_lqcalc_reset_100(&_lq);
+
+            _last_uart_wdt_time = time;
+        }
+    } else {
+        _last_uart_wdt_time = time;
+    }
+
+}
+
+static uint32_t _autobaud() {
+    uint32_t result = 0;
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    uart_dev_t *u = UART_LL_GET_HW(_port_controller);
+
+    int64_t time = esp_timer_get_time();
+
+    if (_autobaud_start_time > 0) {
+        if (time - _autobaud_start_time > MIM_UART_AUTOBAUD_TIMEOUT) {
+            ESP_LOGW(TAG, "baud rate detection timeout after %uus, autobaud en: %u, edges detected: %u", MIM_UART_AUTOBAUD_TIMEOUT, u->conf0.autobaud_en, u->rxd_cnt.rxd_edge_cnt);
+            _autobaud_start_time = 0;
+
+            u->conf0.autobaud_en = 0;
+            u->rx_filt.glitch_filt_en = 0;
+
+        } else if (u->conf0.autobaud_en && u->rxd_cnt.rxd_edge_cnt >= 100) {
+            uint32_t low_period = u->lowpulse.lowpulse_min_cnt;
+            uint32_t high_period = u->highpulse.highpulse_min_cnt;
+            uint32_t baud_auto = UART_CLK_FREQ / ((low_period + high_period + 2) / 2);
+
+            ESP_LOGI(TAG, "baud rate detection done, baud=%lu, time=%lli", baud_auto, time - _autobaud_start_time);
+
+            _autobaud_start_time = 0;
+
+            u->conf0.autobaud_en = 0;
+            u->rx_filt.glitch_filt_en = 0;
+
+            result = baud_auto;
+        }
+
+    } else {
+        ESP_LOGI(TAG, "baud rate detection started");
+        // start baud rate detection
+        _autobaud_start_time = time;
+
+        assert(u->clk_conf.sclk_sel == 1);  // assume APB clock source
+
+        if (!u->conf0.autobaud_en) {
+            u->rx_filt.glitch_filt = 8;
+            u->rx_filt.glitch_filt_en = 1;
+            u->lowpulse.lowpulse_min_cnt = 4095;
+            u->highpulse.highpulse_min_cnt = 4095;
+            u->conf0.autobaud_en = 1;
+        }
+    }
+
+#else
+    _autobaud_current_idx += 1;
+    _autobaud_current_idx = _autobaud_current_idx % ARRAY_LENGTH(MIM_UART_BAUD_RATES);
+    result = MIM_UART_BAUD_RATES[_autobaud_current_idx];
+#endif
+    return result;
+}
+

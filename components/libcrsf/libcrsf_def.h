@@ -76,6 +76,10 @@ typedef enum : uint8_t {
     CRSF_FRAME_TYPE_ARDUPILOT_LEGACY = 0x7F,  // Legacy Ardupilot Frame
 } crsf_frame_type_t;
 
+typedef enum : uint8_t {
+    CRSF_FRAME_SUBTYPE_TIMING_CORRECTION = 0x10,
+} crsf_frame_subtype_t;
+
 typedef struct {
     uint8_t sync;
     uint8_t length;
