@@ -96,17 +96,74 @@ void _param_u16_skymap_udp_port_set(const crsf_device_param_write_value_t *value
     mim_settings_save();
 }
 
+void _param_folder_guidance_get(crsf_device_param_read_value_t *value) {
+    value->folder = "guidance";
+}
+
+void _param_float_guidance_N_get(crsf_device_param_read_value_t *value) {
+    value->flt.value = mim_settings_get()->guidance.N * 10;
+    value->flt.value_min = 20;
+    value->flt.value_max = 100;
+    value->flt.decimal_places = 1;
+    value->flt.step = 1;
+    value->flt.units = "";
+}
+
+void _param_float_guidance_N_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_guidance_N(((float)value->flt) / 10.0);
+    mim_settings_save();
+}
+
+void _param_u8_guidance_max_roll_deg_get(crsf_device_param_read_value_t *value) {
+    value->u8.value = mim_settings_get()->guidance.max_roll_deg;
+    value->u8.value_min = 0;
+    value->u8.value_max = 90;
+    value->u8.units = "deg";
+}
+
+void _param_u8_guidance_max_roll_deg_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_guidance_max_roll_deg(value->u8);
+    mim_settings_save();
+}
+
+void _param_u8_guidance_max_pitch_deg_get(crsf_device_param_read_value_t *value) {
+    value->u8.value = mim_settings_get()->guidance.max_pitch_deg;
+    value->u8.value_min = 0;
+    value->u8.value_max = 90;
+    value->u8.units = "deg";
+}
+
+void _param_u8_guidance_max_pitch_deg_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_guidance_max_pitch_deg(value->u8);
+    mim_settings_save();
+}
+
 void mim_menu_init(crsf_device_t *device) {
     crsf_device_init(device, CRSF_ADDRESS_CRSF_MIM, "crsf-mim", MIM_CRSF_DEVICE_SERIAL);
 
     crsf_device_add_param(device, "mode", CRSF_PARAM_TYPE_SELECT, NULL, 
-                          _param_select_mode_get, _param_select_mode_set);
+                          _param_select_mode_get, 
+                          _param_select_mode_set);
     crsf_device_add_param(device, "link", CRSF_PARAM_TYPE_INFO, NULL, 
                           _param_info_link_get, NULL);
     crsf_device_add_param(device, "ip address", CRSF_PARAM_TYPE_INFO, NULL, 
                           _param_info_ip_address, NULL);
-    crsf_device_add_param(device, "Skymap port", CRSF_PARAM_TYPE_UINT16, NULL, 
-                          _param_u16_skymap_udp_port_get, _param_u16_skymap_udp_port_set);
+    crsf_device_add_param(device, "skymap port", CRSF_PARAM_TYPE_UINT16, NULL, 
+                          _param_u16_skymap_udp_port_get, 
+                          _param_u16_skymap_udp_port_set);
+
+    crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
+                          _param_folder_guidance_get, NULL);
+
+    crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, guidance, 
+                          _param_float_guidance_N_get, 
+                          _param_float_guidance_N_set);
+    crsf_device_add_param(device, "max roll", CRSF_PARAM_TYPE_UINT8, guidance, 
+                          _param_u8_guidance_max_roll_deg_get, 
+                          _param_u8_guidance_max_roll_deg_set);
+    crsf_device_add_param(device, "max pitch", CRSF_PARAM_TYPE_UINT8, guidance, 
+                          _param_u8_guidance_max_pitch_deg_get, 
+                          _param_u8_guidance_max_pitch_deg_set);
 }
 
 void mim_menu_set_skymap(skymap_t *sm) {

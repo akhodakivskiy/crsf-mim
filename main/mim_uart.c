@@ -72,7 +72,7 @@ void mim_uart_init(uart_port_t port_controller, gpio_num_t pin_controller,
 
     assert(xTaskCreatePinnedToCore(_task_controller_impl, "controller", 4096, NULL, configMAX_PRIORITIES - 2, &_task_controller, APP_CPU_NUM) == pdPASS);
 
-    assert(xTaskCreatePinnedToCore(_task_module_impl, "module", 4096, NULL, configMAX_PRIORITIES - 3, &_task_module, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_module_impl, "module", 4096, NULL, configMAX_PRIORITIES - 2, &_task_module, APP_CPU_NUM) == pdPASS);
 
     _is_init = true;
 }
@@ -178,7 +178,8 @@ void _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
     uint8_t header[3] = { frame->sync, frame->length, frame->type };
     assert(uart_write_bytes(port, header, 3) == 3);
     if (frame->length > 1) {
-        assert(uart_write_bytes(port, frame->data, frame->length - 1) == (frame->length - 1));
+        int size_written = uart_write_bytes(port, frame->data, frame->length - 1);
+        assert(size_written == (frame->length - 1));
     }
     ESP_ERROR_CHECK(uart_wait_tx_done(port, portMAX_DELAY));
 }
@@ -198,7 +199,7 @@ static void _task_controller_impl(void *arg) {
     ESP_LOGI(TAG_CONTROLLER, "controller task started");
 
     while (true) {
-        _uart_wdt(_port_controller, _pin_controller);
+        _uart_wdt();
 
         util_lqcalc_prepare(&_lq);
 
@@ -317,6 +318,10 @@ static void _uart_wdt() {
 
             util_lqcalc_reset_100(&_lq);
 
+        }
+
+        // no autobaud pending
+        if (_autobaud_start_time == 0) {
             _last_uart_wdt_time = time;
         }
     } else {

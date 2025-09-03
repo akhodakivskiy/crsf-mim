@@ -14,11 +14,12 @@ static const char *TAG = "SKYMAP";
 
 static const uint8_t _skymap_header[4] = { 0x54, 0x54, 0x50, 0x01 };
 
-void skymap_reset(skymap_t *sm) {
+void skymap_init(skymap_t *sm) {
     sm->is_connected = false;
-    sm->is_ready_to_engage = false;
     sm->is_client_message_ready = false;
+    sm->is_ready_to_engage = false;
 
+    sm->last_time = 0;
     sm->last_time_client_message = 0;
     sm->last_time_server_message = 0;
     sm->last_time_ping = 0;
@@ -27,11 +28,17 @@ void skymap_reset(skymap_t *sm) {
 }
 
 void skymap_update(skymap_t *sm, int64_t time) {
-    sm->is_connected = SKYMAP_CONNECTION_TIMEOUT_US > (time - sm->last_time_server_message);
-    sm->is_ready_to_engage = 
-        (SKYMAP_CONNECTION_TIMEOUT_US > (time - sm->last_time_interceptor)) &&
-        (SKYMAP_CONNECTION_TIMEOUT_US > (time - sm->last_time_target));
-    sm->is_client_message_ready = SKYMAP_STATUS_TIMEOUT_US <= (time - sm->last_time_client_message);
+    sm->last_time = time;
+    sm->is_connected = (time > SKYMAP_CONNECTION_TIMEOUT_US) && 
+        ((time - sm->last_time_server_message) > SKYMAP_CONNECTION_TIMEOUT_US);
+    sm->is_client_message_ready = sm->is_connected &&
+        ((time - sm->last_time_client_message) > SKYMAP_STATUS_TIMEOUT_US);
+    sm->is_ready_to_engage = (time > SKYMAP_CONNECTION_TIMEOUT_US) &&
+        ((time - sm->last_time_server_message) < SKYMAP_CONNECTION_TIMEOUT_US) &&
+        ((time - sm->last_time_interceptor) < SKYMAP_CONNECTION_TIMEOUT_US) &&
+        ((time - sm->last_time_target) < SKYMAP_CONNECTION_TIMEOUT_US) &&
+        sm->target.has_position && sm->target.has_velocity &&
+        sm->interceptor.has_position && sm->interceptor.has_velocity;
 }
 
 skymap_err_t skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len) {
@@ -58,24 +65,19 @@ skymap_err_t skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *dat
 
         switch (m.which_message) {
             case ai_skyfortress_guidance_ServerMessage_ping_tag:
-                //ESP_LOGI(TAG, "ping");
                 sm->last_time_ping = time;
                 break;
             case ai_skyfortress_guidance_ServerMessage_target_estimate_tag:
-                //ESP_LOGI(TAG, "target estimate");
+                sm->target = m.message.target_estimate;
                 sm->last_time_target = time;
                 break;
             case ai_skyfortress_guidance_ServerMessage_interceptor_estimate_tag:
-                //ESP_LOGI(TAG, "interceptor estimate");
+                sm->interceptor = m.message.interceptor_estimate;
                 sm->last_time_interceptor = time;
                 break;
             case ai_skyfortress_guidance_ServerMessage_target_raw_tag:
-                //ESP_LOGI(TAG, "target raw");
-                sm->last_time_target = time;
                 break;
             case ai_skyfortress_guidance_ServerMessage_interceptor_raw_tag:
-                //ESP_LOGI(TAG, "interceptor raw");
-                sm->last_time_interceptor = time;
                 break;
         }
     }

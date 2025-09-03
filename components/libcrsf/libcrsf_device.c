@@ -13,9 +13,6 @@ void _crsf_device_foot_get_value(crsf_device_param_read_value_t *value) {
     value->folder = "__root__";
 }
 
-void _crsf_device_foot_set_value(const crsf_device_param_write_value_t *value) {
-}
-
 void crsf_device_init(crsf_device_t *device, 
                       crsf_address_t address, const char *name, uint32_t serial) {
     device->address = address;
@@ -23,7 +20,7 @@ void crsf_device_init(crsf_device_t *device,
     device->serial = serial;
     device->param_count = 0;
 
-    crsf_device_add_param(device, "__root__", CRSF_PARAM_TYPE_FOLDER, NULL, _crsf_device_foot_get_value, _crsf_device_foot_set_value);
+    crsf_device_add_param(device, "__root__", CRSF_PARAM_TYPE_FOLDER, NULL, _crsf_device_foot_get_value, NULL);
 }
 
 crsf_device_param_t *crsf_device_add_param(crsf_device_t *device,

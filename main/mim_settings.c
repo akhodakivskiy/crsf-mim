@@ -20,6 +20,12 @@ static const mim_settings_t mim_settings_default = {
     .wifi_ssid = CONFIG_CRSF_MIM_WIFI_SSID,
     .wifi_password = CONFIG_CRSF_MIM_WIFI_PASSWORD,
     .skymap_udp_port = 8888,
+    .engage_channel = 16,
+    .guidance = {
+        .N = 3,
+        .max_roll_deg = 35,
+        .max_pitch_deg = 25,
+    }
 };
 
 esp_err_t mim_settings_init(void) {
@@ -151,6 +157,33 @@ esp_err_t mim_settings_set_engage_channel(uint8_t channel) {
     }
 
     mim_settings_current.engage_channel = channel;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_guidance_N(float N) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.guidance.N = N;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_guidance_max_roll_deg(uint8_t max_roll_deg) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.guidance.max_roll_deg = max_roll_deg;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_guidance_max_pitch_deg(uint8_t max_pitch_deg) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.guidance.max_pitch_deg = max_pitch_deg;
     return ESP_OK;
 }
 

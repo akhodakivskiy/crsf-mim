@@ -8,11 +8,13 @@ idf_component_register(
     "main_tx.c" 
   INCLUDE_DIRS "."
   REQUIRES 
+    esp_driver_gptimer 
+    esp_driver_uart 
+    esp_driver_gpio 
+
     async_logging
     util
     libcrsf 
     libnet 
-    esp_driver_gptimer 
-    esp_driver_uart 
-    esp_driver_gpio 
+    nav
     skymap)

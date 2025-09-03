@@ -72,7 +72,7 @@ void app_main(void) {
     // init CRSF device menu
     mim_menu_init(&crsf_device);
 
-    //mim_skymap_init();
+    mim_skymap_init();
 }
 
 static void _frame_handler_controller(crsf_frame_t *frame) {
