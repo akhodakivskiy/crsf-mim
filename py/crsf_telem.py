@@ -3,10 +3,7 @@ import serial
 import argparse
 import sys
 import time
-import crsf_parser
-
-def pkt_handler(frame: Container, status: crsf_parser.PacketValidationStatus):
-    print(f"{frame} - {status}")
+import crsf_lib
 
 def read_serial(port, baudrate=9600, timeout=1):
     """
@@ -31,7 +28,7 @@ def read_serial(port, baudrate=9600, timeout=1):
         print(f"Connected to {port} at {baudrate} baud")
         print("Press Ctrl+C to exit\n")
 
-        parser = crsf_parser.CRSFParser(pkt_handler)
+        parser = crsf_lib.CRSFParser()
 
         # Continuously read data
         while True:
@@ -41,8 +38,11 @@ def read_serial(port, baudrate=9600, timeout=1):
 
                 if data is None:
                     continue
+
+                offset = 0
                 if len(data) > 0:
                     # If decoding fails, print raw bytes
+                    parser.parse_frame()
                     input = bytearray(data)
                     parser.parse_stream(input)
                     print(f"Received (raw): {data.hex()}")

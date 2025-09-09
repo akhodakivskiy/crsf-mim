@@ -21,6 +21,8 @@ typedef struct {
     ip4_addr_t skymap_addr;
     uint16_t skymap_port;
     SemaphoreHandle_t skymap_sem;
+
+    bool guidance_enabled;
     nav_guidance_t guidance_config;
     nav_guidance_command_t guidance_command;
 } skymap_ctx_t;
@@ -48,6 +50,7 @@ void mim_skymap_init() {
 
     memset(&_skymap_ctx.guidance_command, 0, sizeof(nav_guidance_command_t));
 
+    _skymap_ctx.guidance_enabled = false;
     _skymap_ctx.guidance_config.N = mim_settings_get()->guidance.N;
     _skymap_ctx.guidance_config.max_roll_deg = mim_settings_get()->guidance.max_roll_deg;
     _skymap_ctx.guidance_config.max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg;
@@ -55,7 +58,21 @@ void mim_skymap_init() {
     assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, configMAX_PRIORITIES - 3, &_task_skymap, APP_CPU_NUM) == pdPASS);
 }
 
+void mim_skymap_guidance_enable(bool enable) {
+    _skymap_ctx.guidance_enabled = enable;
+}
+
 void mim_skymap_get_command(mim_skymap_command_t *command) {
+    xSemaphoreTake(_skymap_ctx.skymap_sem, portMAX_DELAY);
+    command->is_valid = _skymap_ctx.skymap.is_ready_to_engage && (_skymap_ctx.guidance_command.type != NAV_GUIDANCE_NONE);
+    if (_skymap_ctx.guidance_enabled && command->is_valid) {
+        command->roll_cmd = _skymap_ctx.guidance_command.roll_cmd;
+        command->pitch_cmd = _skymap_ctx.guidance_command.pitch_cmd;
+    } else {
+        command->roll_cmd = 0.0;
+        command->pitch_cmd = 0.0;
+    }
+    xSemaphoreGive(_skymap_ctx.skymap_sem);
 }
 
 static void _udp_on_connected(void *user_ctx, ip4_addr_t *addr) {
@@ -125,7 +142,6 @@ static void _task_skymap_impl(void *arg) {
 
             if (skymap_write_client_message(&_skymap_ctx.skymap, esp_timer_get_time(), data, sizeof(data), &len_written) == SKYMAP_OK) {
                 ESP_ERROR_CHECK(libnet_udp_send(&_skymap_ctx.skymap_addr, _skymap_ctx.skymap_port, data, len_written));
-                //ESP_LOGI(TAG, "sending client status message");
             }
         } else {
             skymap_update(&_skymap_ctx.skymap, esp_timer_get_time());
@@ -137,8 +153,8 @@ static void _task_skymap_impl(void *arg) {
 }
 
 static void _skymap_update() {
-    skymap_t *sm = &_skymap_ctx.skymap;
-    if (sm->is_ready_to_engage) {
+    if (_skymap_ctx.guidance_enabled && _skymap_ctx.skymap.is_ready_to_engage) {
+        skymap_t *sm = &_skymap_ctx.skymap;
 
         nav_guidance_state_t state_interceptor = {
             .lat = sm->interceptor.position.latitude_deg,

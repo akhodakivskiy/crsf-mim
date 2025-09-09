@@ -116,7 +116,7 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
 
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(port, pin, pin, -1, -1));
-    ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 10, queue, 0));
+    ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 10, queue, ESP_INTR_FLAG_LEVEL3));
     ESP_ERROR_CHECK(uart_intr_config(port, &intr_cfg));
     ESP_ERROR_CHECK(uart_enable_rx_intr(port));
 }

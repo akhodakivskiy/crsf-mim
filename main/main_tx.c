@@ -1,4 +1,5 @@
 #include "freertos/projdefs.h"
+#include "libcrsf_payload.h"
 #include "skymap.pb.h"
 #include <sdkconfig.h>
 
@@ -49,14 +50,14 @@ static void _skymap_handler(crsf_frame_t *frame);
 
 crsf_device_t crsf_device;
 
-frame_counter_t counter_controller;
-frame_counter_t counter_module;
+frame_counter_t _counter_controller;
+frame_counter_t _counter_module;
 
 void app_main(void) {
-    memset(&counter_controller, 0, sizeof(frame_counter_t));
-    counter_controller.name = "CONTROLLER";
-    memset(&counter_module, 0, sizeof(frame_counter_t));
-    counter_module.name = "MODULE";
+    memset(&_counter_controller, 0, sizeof(frame_counter_t));
+    _counter_controller.name = "CONTROLLER";
+    memset(&_counter_module, 0, sizeof(frame_counter_t));
+    _counter_module.name = "MODULE";
 
     async_logging_init(PRO_CPU_NUM);
 
@@ -76,7 +77,7 @@ void app_main(void) {
 }
 
 static void _frame_handler_controller(crsf_frame_t *frame) {
-    _count_frames(frame, &counter_controller);
+    _count_frames(frame, &_counter_controller);
 
     crsf_frame_t frame_out;
     crsf_device_result_t err = crsf_device_client_handler(&crsf_device, frame, &frame_out);
@@ -91,7 +92,22 @@ static void _frame_handler_controller(crsf_frame_t *frame) {
 }
 
 static void _frame_handler_module(crsf_frame_t *frame) {
-    _count_frames(frame, &counter_module);
+    _count_frames(frame, &_counter_module);
+
+    union {
+        crsf_payload_gps_t gps;
+        crsf_payload_baro_altitude_t alt;
+        crsf_payload_vario_t vario;
+    } f;
+
+    if (crsf_payload_unpack__gps(frame, &f.gps)) {
+        ESP_LOGI(TAG, "GPS lat=%li, lon=%li, gs=%u, heading=%.2f, alt=%u, sats=%u",
+                 f.gps.latitude, f.gps.longitude, f.gps.groundspeed_kmh, f.gps.heading_cdeg / 100.0, f.gps.altitude_m, f.gps.satellites);
+    } else if (crsf_payload_unpack__baro_altitude(frame, &f.alt)) {
+        ESP_LOGI(TAG, "BARO-ALT %.4fm, %.4f", f.alt.altitude_dm / 10.0, f.alt.vertical_speed_cm_s / 100.0);
+    } else if (crsf_payload_unpack__vario(frame, &f.vario)) {
+        ESP_LOGI(TAG, "VARIO %.4f", f.vario.vspeed_cms / 100.0);
+    }
 }
 
 static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
@@ -107,12 +123,47 @@ static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
                 log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, counter->frames_by_type[i]);
             }
         }
-
-        //ESP_LOGI(TAG, "%s: %s", counter->name, log);
+        ESP_LOGI(TAG, "%s - %s", counter->name, log);
     }
 }
 
 static void _skymap_handler(crsf_frame_t *frame) {
+    crsf_payload_rc_channels_t c;
+    if (crsf_payload_unpack__rc_channels(frame, &c)) {
+        uint8_t ch_engage = mim_settings_get()->engage_channel - 1;
+        if (ch_engage >= 0 && ch_engage < 16) {
+            bool guidance_enabled = c.channels[ch_engage] > CRSF_PAYLOAD_RC_CHANNELS_CENTER;
+            mim_skymap_guidance_enable(guidance_enabled);
+        }
+
+        mim_skymap_command_t command;
+        mim_skymap_get_command(&command);
+
+        if (command.is_valid) {
+            uint8_t ch_roll = 0;
+            uint8_t ch_pitch = 1;
+
+            uint16_t range = CRSF_PAYLOAD_RC_CHANNELS_MAX - CRSF_PAYLOAD_RC_CHANNELS_MIN;
+            uint16_t roll = CRSF_PAYLOAD_RC_CHANNELS_CENTER + command.roll_cmd * range;
+            uint16_t pitch = CRSF_PAYLOAD_RC_CHANNELS_CENTER + command.pitch_cmd * range;
+            crsf_payload_modify__rc_channels(frame, ch_roll, roll);
+            crsf_payload_modify__rc_channels(frame, ch_pitch, pitch);
+        }
+
+        /*
+        static int64_t last_log_time = 0;
+        if (esp_timer_get_time() > last_log_time + 1000000) {
+            last_log_time = esp_timer_get_time();
+            ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
+                     c.channels[0], c.channels[1], c.channels[2], c.channels[3],
+                     c.channels[4], c.channels[5], c.channels[6], c.channels[7],
+                     c.channels[8], c.channels[9], c.channels[10], c.channels[11],
+                     c.channels[12], c.channels[13], c.channels[14], c.channels[15]);
+            ESP_LOGI(TAG, "channel: %u[%u], valid: %u, roll: %.4lf, pitch: %.4lf",
+                     ch_engage, c.channels[ch_engage], command.is_valid, command.roll_cmd, command.pitch_cmd);
+        }
+        */
+    }
 }
 
 #endif

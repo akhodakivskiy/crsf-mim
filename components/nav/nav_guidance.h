@@ -1,7 +1,7 @@
 #ifndef NAV_GUIDANCE_H
 #define NAV_GUIDANCE_H
 
-#include "nav_vector.h"
+#include "libla_vector.h"
 
 #include <stdbool.h>
 
@@ -19,7 +19,7 @@ typedef enum {
 
 typedef struct {
     nav_guidance_type_t type;
-    nav_vector_t accel;
+    la_vector_t accel;
     double accel_lateral;
     double accel_vertical;
     double roll_deg;
@@ -39,25 +39,25 @@ typedef struct {
 
 void nav_state_to_ned(const nav_guidance_state_t *state_ref, 
                       const nav_guidance_state_t *state, 
-                      nav_vector_t *ned);
+                      la_vector_t *ned);
 
 bool nav_guidance_pursuit(
     double N,
-    const nav_vector_t *range,
-    const nav_vector_t *vel_i,
-    nav_vector_t *accel);
+    const la_vector_t *range,
+    const la_vector_t *vel_i,
+    la_vector_t *accel);
 
 bool nav_guidance_pronav_true(
     double N,
-    const nav_vector_t *range,
-    const nav_vector_t *vel_i, const nav_vector_t *vel_t,
-    nav_vector_t *accel);
+    const la_vector_t *range,
+    const la_vector_t *vel_i, const la_vector_t *vel_t,
+    la_vector_t *accel);
 
 nav_guidance_type_t nav_guidance_compute_accel(
     const nav_guidance_t *g,
-    const nav_vector_t *range,
-    const nav_vector_t *vel_i, const nav_vector_t *vel_t,
-    nav_vector_t *accel);
+    const la_vector_t *range,
+    const la_vector_t *vel_i, const la_vector_t *vel_t,
+    la_vector_t *accel);
 
 void nav_guidance_compute_command(
     const nav_guidance_t *g, 

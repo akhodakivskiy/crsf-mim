@@ -96,6 +96,18 @@ void _param_u16_skymap_udp_port_set(const crsf_device_param_write_value_t *value
     mim_settings_save();
 }
 
+void _param_u8_engage_channel_get(crsf_device_param_read_value_t *value) {
+    value->u8.value = mim_settings_get()->engage_channel;
+    value->u8.value_min = 1;
+    value->u8.value_max = 16;
+    value->u8.units = "";
+}
+
+void _param_u8_engage_channel_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_engage_channel(value->u8);
+    mim_settings_save();
+}
+
 void _param_folder_guidance_get(crsf_device_param_read_value_t *value) {
     value->folder = "guidance";
 }
@@ -151,6 +163,10 @@ void mim_menu_init(crsf_device_t *device) {
     crsf_device_add_param(device, "skymap port", CRSF_PARAM_TYPE_UINT16, NULL, 
                           _param_u16_skymap_udp_port_get, 
                           _param_u16_skymap_udp_port_set);
+
+    crsf_device_add_param(device, "engage chan", CRSF_PARAM_TYPE_UINT8, NULL, 
+                          _param_u8_engage_channel_get, 
+                          _param_u8_engage_channel_set);
 
     crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
                           _param_folder_guidance_get, NULL);

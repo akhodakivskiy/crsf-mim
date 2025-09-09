@@ -4,11 +4,14 @@
 #include "skymap.h"
 
 typedef struct {
-    double accel_lateral;
-    double accel_vertical;
+    bool is_valid;
+    double roll_cmd;
+    double pitch_cmd;
 } mim_skymap_command_t;
 
 void mim_skymap_init();
+
+void mim_skymap_guidance_enable(bool enable);
 
 void mim_skymap_get_command(mim_skymap_command_t *command);
 

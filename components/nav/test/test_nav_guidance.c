@@ -9,7 +9,7 @@ static const char *TAG = "TEST_NAV";
 
 /* pursuit tests */
 
-TEST_CASE("pursuit aligned", "[pursuit]") {
+TEST_CASE("pursuit aligned", "nav") {
     nav_vector_t range = { .x = 100, .y = 0, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
 
@@ -23,7 +23,7 @@ TEST_CASE("pursuit aligned", "[pursuit]") {
     TEST_ASSERT(accel.z == 0);
 }
 
-TEST_CASE("pursuit right", "[pursuit]") {
+TEST_CASE("pursuit right", "nav") {
     nav_vector_t range = { .x = 100, .y = 10, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
 
@@ -37,7 +37,7 @@ TEST_CASE("pursuit right", "[pursuit]") {
     TEST_ASSERT(accel.z == 0);
 }
 
-TEST_CASE("pursuit left", "[pursuit]") {
+TEST_CASE("pursuit left", "nav") {
     nav_vector_t range = { .x = 100, .y = -10, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
 
@@ -54,7 +54,7 @@ TEST_CASE("pursuit left", "[pursuit]") {
 
 /* proportional navigation tests */
 
-TEST_CASE("pronav aligned", "[pronav]") {
+TEST_CASE("pronav aligned", "nav") {
     nav_vector_t range = { .x = 100, .y = 0, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
     nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
@@ -69,7 +69,7 @@ TEST_CASE("pronav aligned", "[pronav]") {
     TEST_ASSERT(accel.z == 0);
 }
 
-TEST_CASE("pronav right", "[pronav]") {
+TEST_CASE("pronav right", "nav") {
     nav_vector_t range = { .x = 100, .y = 10, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
     nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
@@ -86,7 +86,7 @@ TEST_CASE("pronav right", "[pronav]") {
     TEST_ASSERT(accel.z == 0);
 }
 
-TEST_CASE("pronav left", "[pronav]") {
+TEST_CASE("pronav left", "nav") {
     nav_vector_t range = { .x = 100, .y = -10, .z = 0 };
     nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
     nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
@@ -105,7 +105,7 @@ TEST_CASE("pronav left", "[pronav]") {
 
 /* guidance tests */
 
-TEST_CASE("guidance pronav", "[nav]") {
+TEST_CASE("guidance pronav", "nav") {
     nav_guidance_state_t ic = {
         .lat= 30.0,
         .lon= 50.0,
@@ -139,7 +139,7 @@ TEST_CASE("guidance pronav", "[nav]") {
     TEST_ASSERT_DOUBLE_WITHIN(0.001, 0.013, c.pitch_cmd);
 }
 
-TEST_CASE("guidance pursuit", "[nav]") {
+TEST_CASE("guidance pursuit", "nav") {
     nav_guidance_state_t ic = {
         .lat= 30.0,
         .lon= 50.0,

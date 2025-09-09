@@ -2,8 +2,6 @@
 #include <string.h>
 #include <unity.h>
 
-static void print_banner(const char* text);
-
 void app_main(void) {
     UNITY_BEGIN();
     unity_run_all_tests();

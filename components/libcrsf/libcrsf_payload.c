@@ -6,8 +6,53 @@
 #include <esp_log.h>
 #include <string.h>
 #include <endian.h>
+#include <math.h>
 
 static const char *TAG = "CRSF_PAYLOAD";
+
+#define UNPACK_CHANNEL(ch_idx, bit_pos) \
+    do { \
+        uint32_t __byte_idx = (bit_pos) >> 3; \
+        uint32_t __shift = (bit_pos) & 7; \
+        payload->channels[ch_idx] = ((*(uint32_t*)(data + __byte_idx)) >> __shift) & 0x07FF; \
+    } while(0)
+
+#define PACK_CHANNEL(ch_idx, v, bit_pos) \
+    do { \
+        uint32_t __byte_idx = (bit_pos) >> 3; \
+        uint32_t __shift = (bit_pos) & 7; \
+        uint32_t __ch_v = v & 0x07FF; \
+        *(uint32_t*)(data + __byte_idx) |= (__ch_v << __shift); \
+    } while(0)
+
+bool crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload) {
+    if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
+        (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
+
+        const uint8_t *data = frame->data;
+
+        UNPACK_CHANNEL(0,  0);
+        UNPACK_CHANNEL(1,  11);
+        UNPACK_CHANNEL(2,  22);
+        UNPACK_CHANNEL(3,  33);
+        UNPACK_CHANNEL(4,  44);
+        UNPACK_CHANNEL(5,  55);
+        UNPACK_CHANNEL(6,  66);
+        UNPACK_CHANNEL(7,  77);
+        UNPACK_CHANNEL(8,  88);
+        UNPACK_CHANNEL(9,  99);
+        UNPACK_CHANNEL(10, 110);
+        UNPACK_CHANNEL(11, 121);
+        UNPACK_CHANNEL(12, 132);
+        UNPACK_CHANNEL(13, 143);
+        UNPACK_CHANNEL(14, 154);
+        UNPACK_CHANNEL(15, 165);
+
+        return true;
+    }
+
+    return false;
+}
 
 bool crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
     if ((frame->type == CRSF_FRAME_TYPE_PARAM_READ) &&
@@ -106,6 +151,78 @@ bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payl
     }
 
     return false;
+}
+
+bool crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_GPS && frame->length == CRSF_PAYLOAD_LENGTH_GPS) {
+        payload->latitude = (int32_t)be32toh(*(int32_t *)(frame->data + 0));
+        payload->longitude = (int32_t)be32toh(*(int32_t *)(frame->data + 4));
+        payload->groundspeed_kmh = be16toh(*(uint16_t *)(frame->data + 8));
+        payload->heading_cdeg = be16toh(*(uint16_t *)(frame->data + 10));
+        payload->altitude_m = be16toh(*(uint16_t *)(frame->data + 12)) - 1000;
+        payload->satellites = *(uint8_t *)(frame->data + 14);
+
+        return true;
+    }
+    return false;
+}
+
+const float _CRSF_ALT_BARO_K_R = .026;
+const int _CRSF_ALT_BARO_K_L = 100;
+
+bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_BARO_ALTITUDE && frame->length == CRSF_PAYLOAD_LENGTH_BARO_ALTITUDE) {
+        ESP_LOG_BUFFER_HEX(TAG, frame->data, 2);
+        uint8_t alt_packed_0 = frame->data[0];
+        uint8_t alt_packed_1 = frame->data[1];
+        payload->altitude_dm = (alt_packed_0 & 0x80) ? 
+            ((((alt_packed_0 & 0x7f) << 8) + alt_packed_1) * 10) : 
+            ((alt_packed_0 << 8) + alt_packed_1 - 10000);
+
+        int8_t vspd_packed = *(int8_t *)(frame->data + 2);
+        payload->vertical_speed_cm_s = exp(fabs(vspd_packed * _CRSF_ALT_BARO_K_R) - 1) * 
+            _CRSF_ALT_BARO_K_L * (vspd_packed > 0 ? 1 : -1);
+
+        return true;
+    }
+    return false;
+}
+
+bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_VARIO && frame->length == CRSF_PAYLOAD_LENGTH_VARIO) {
+        payload->vspeed_cms = (int16_t)be16toh(*(uint16_t *)frame->data);
+        return true;
+    }
+
+    return false;
+}
+
+void crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload) {
+
+    frame->type = CRSF_FRAME_TYPE_RC_CHANNELS_PACKED;
+    frame->length = CRSF_PAYLOAD_LENGTH_RC_CHANNELS;
+
+    uint8_t *data = frame->data;
+    memset(data, 0, 22);
+
+    PACK_CHANNEL(0, payload->channels[0], 0);
+    PACK_CHANNEL(1, payload->channels[1], 11);
+    PACK_CHANNEL(2, payload->channels[2], 22);
+    PACK_CHANNEL(3, payload->channels[4],  33);
+    PACK_CHANNEL(4, payload->channels[5],  44);
+    PACK_CHANNEL(5, payload->channels[6],  55);
+    PACK_CHANNEL(6, payload->channels[7],  66);
+    PACK_CHANNEL(7, payload->channels[8],  77);
+    PACK_CHANNEL(8, payload->channels[9],  88);
+    PACK_CHANNEL(9, payload->channels[10],  99);
+    PACK_CHANNEL(10, payload->channels[11], 110);
+    PACK_CHANNEL(11, payload->channels[12], 121);
+    PACK_CHANNEL(12, payload->channels[13], 132);
+    PACK_CHANNEL(13, payload->channels[14], 143);
+    PACK_CHANNEL(14, payload->channels[15], 154);
+    PACK_CHANNEL(15, payload->channels[16], 165);
+
+    frame->data[frame->length - 2] = crsf_calc_crc8(frame);
 }
 
 void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
@@ -253,11 +370,24 @@ void crsf_payload_pack__param_entry(crsf_frame_t *frame,
 bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns) {
     if ((frame->type == CRSF_FRAME_TYPE_RADIO_ID) &&
         (frame->data[2] == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) &&
-        (frame->length == 13)) {
+        (frame->length == CRSF_PAYLOAD_LENGTH_RADIO_ID)) {
         *(uint32_t *)(frame->data + 3) = htobe32(interval_100ns);
         *(uint32_t *)(frame->data + 7) = htobe32((uint32_t)offset_100ns);
 
         return true;
     }
+    return false;
+}
+
+bool crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int16_t value) {
+    if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
+        (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
+
+        uint8_t *data = frame->data;
+        PACK_CHANNEL(channel, value, channel * 11);
+
+        return true;
+    }
+
     return false;
 }
