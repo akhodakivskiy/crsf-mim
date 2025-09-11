@@ -24,6 +24,7 @@
 #include "mim_uart.h"
 #include "mim_settings.h"
 #include "mim_skymap.h"
+#include "mim_rc.h"
 
 static const char *TAG= "MAIN_TX";
 static const char *TAG_CONTROLLER = "MAIN_TX_CONTROLLER";
@@ -94,6 +95,7 @@ static void _frame_handler_controller(crsf_frame_t *frame) {
 static void _frame_handler_module(crsf_frame_t *frame) {
     _count_frames(frame, &_counter_module);
 
+    /*
     union {
         crsf_payload_gps_t gps;
         crsf_payload_baro_altitude_t alt;
@@ -108,6 +110,7 @@ static void _frame_handler_module(crsf_frame_t *frame) {
     } else if (crsf_payload_unpack__vario(frame, &f.vario)) {
         ESP_LOGI(TAG, "VARIO %.4f", f.vario.vspeed_cms / 100.0);
     }
+    */
 }
 
 static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
@@ -123,34 +126,32 @@ static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
                 log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, counter->frames_by_type[i]);
             }
         }
-        ESP_LOGI(TAG, "%s - %s", counter->name, log);
+        //ESP_LOGI(TAG, "%s - %s", counter->name, log);
     }
 }
 
 static void _skymap_handler(crsf_frame_t *frame) {
     crsf_payload_rc_channels_t c;
     if (crsf_payload_unpack__rc_channels(frame, &c)) {
+        // enable skymap based on the engage channel
         uint8_t ch_engage = mim_settings_get()->engage_channel - 1;
         if (ch_engage >= 0 && ch_engage < 16) {
-            bool guidance_enabled = c.channels[ch_engage] > CRSF_PAYLOAD_RC_CHANNELS_CENTER;
+            bool guidance_enabled = c.channels[ch_engage] > CRSF_RC_CHANNELS_CENTER;
             mim_skymap_guidance_enable(guidance_enabled);
+        } else if (mim_skymap_guidance_is_enabled()) {
+            mim_skymap_guidance_enable(false);
+            mim_rc_clear_overrides();
         }
 
-        mim_skymap_command_t command;
-        mim_skymap_get_command(&command);
+        // override channels
+        uint16_t roll = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, c.channels[MIM_RC_CHANNEL_ROLL - 1]);
+        uint16_t pitch = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, c.channels[MIM_RC_CHANNEL_PITCH - 1]);
 
-        if (command.is_valid) {
-            uint8_t ch_roll = 0;
-            uint8_t ch_pitch = 1;
+        c.channels[MIM_RC_CHANNEL_ROLL] = roll;
+        c.channels[MIM_RC_CHANNEL_PITCH] = pitch;
 
-            uint16_t range = CRSF_PAYLOAD_RC_CHANNELS_MAX - CRSF_PAYLOAD_RC_CHANNELS_MIN;
-            uint16_t roll = CRSF_PAYLOAD_RC_CHANNELS_CENTER + command.roll_cmd * range;
-            uint16_t pitch = CRSF_PAYLOAD_RC_CHANNELS_CENTER + command.pitch_cmd * range;
-            crsf_payload_modify__rc_channels(frame, ch_roll, roll);
-            crsf_payload_modify__rc_channels(frame, ch_pitch, pitch);
-        }
+        crsf_payload_pack__rc_channels(frame, &c);
 
-        /*
         static int64_t last_log_time = 0;
         if (esp_timer_get_time() > last_log_time + 1000000) {
             last_log_time = esp_timer_get_time();
@@ -159,10 +160,9 @@ static void _skymap_handler(crsf_frame_t *frame) {
                      c.channels[4], c.channels[5], c.channels[6], c.channels[7],
                      c.channels[8], c.channels[9], c.channels[10], c.channels[11],
                      c.channels[12], c.channels[13], c.channels[14], c.channels[15]);
-            ESP_LOGI(TAG, "channel: %u[%u], valid: %u, roll: %.4lf, pitch: %.4lf",
-                     ch_engage, c.channels[ch_engage], command.is_valid, command.roll_cmd, command.pitch_cmd);
+            ESP_LOGI(TAG, "channel: %u[%u], roll: %u, pitch: %u",
+                     ch_engage, c.channels[ch_engage], roll, pitch);
         }
-        */
     }
 }
 

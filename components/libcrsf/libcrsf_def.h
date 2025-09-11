@@ -6,6 +6,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define CRSF_RC_CHANNELS_CENTER 992
+#define CRSF_RC_CHANNELS_MIN 172
+#define CRSF_RC_CHANNELS_MAX 1811
+#define CRSF_RC_CHANNELS_RANGE (CRSF_RC_CHANNELS_MAX - CRSF_RC_CHANNELS_MIN)
+#define CRSF_RC_CHANNELS_TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
+#define CRSF_RC_CHANNELS_US_TO_TICKS(x) ((x - 1500) * 8 / 5 + 992)
+
 #define CRSF_MIN_FRAME_LEN 4 // sync+type+len+crc
 #define CRSF_MAX_FRAME_LEN 64 // sync+type+len+[payload]+crc
 #define CRSF_MAX_PAYLOAD_LEN (CRSF_MAX_FRAME_LEN - 4)

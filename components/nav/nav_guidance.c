@@ -1,9 +1,8 @@
 #include "nav_guidance.h"
 
-#include "libla_vector.h"
+#include "la.h"
 
 #include <esp_log.h>
-#include <float.h>
 
 static const char *TAG = "NAV";
 
@@ -13,118 +12,127 @@ static const char *TAG = "NAV";
 #define NAV_DEG_TO_LEN (NAV_DEG_TO_RAD * NAV_R_EARTH)
 #define NAV_G 9.81
 
-#define NAV_GUIDANCE_COMMAND_SET_ZERO(C) \
-   C->accel_lateral = 0; \
-   C->accel_vertical = 0; \
-   C->type = NAV_GUIDANCE_NONE;
-
-#define _NAV_CLAMP(X, MIN, MAX) ((X < MIN) ? MIN : ((X > MAX) ? MAX : X))
-#define _NAV_CLAMP2(X, Y) _NAV_CLAMP(X, -Y, Y)
 #define _NAV_RAD_TO_DEG(X) (X * 180 / NAV_PI)
 
 void nav_state_to_ned(const nav_guidance_state_t *state_ref, 
                       const nav_guidance_state_t *state, 
-                      la_vector_t *ned) {
+                      la_float *ned) {
     double dlat = state->lat - state_ref->lat;
     double dlon = state->lon - state_ref->lon;
     double dalt = state->alt - state_ref->alt;
 
-    ned->x = dlat * NAV_DEG_TO_LEN;
-    ned->y = dlon * NAV_DEG_TO_LEN * cos(state_ref->lat * NAV_DEG_TO_RAD);
-    ned->z = -dalt;
+    ned[0] = dlat * NAV_DEG_TO_LEN;
+    ned[1] = dlon * NAV_DEG_TO_LEN * la_cos(state_ref->lat * NAV_DEG_TO_RAD);
+    ned[2] = -dalt;
 }
 
 bool nav_guidance_pursuit(
-    double N,
-    const la_vector_t *range,
-    const la_vector_t *vel_i,
-    la_vector_t *accel) {
+    la_float N,
+    const la_float *range,
+    const la_float *vel_i,
+    la_float *accel) {
 
-    la_vector_set_zero(accel);
+    la_zero(accel, 3);
 
     // range vector and its unit
-    double range_norm = 0.0;
-    la_vector_t range_unit = la_vector_unit(range, &range_norm);
+    la_float range_unit[3] = {0};
+    la_float range_norm = la_vec_unit(range, range_unit, 3);
+    if (range_norm < 1.0) {
+        ESP_LOGW(TAG, "PURSUIT: low range");
+        return false;
+    }
+
 
     // interceptor velocity unit vector
-    double vel_i_norm = 0.0;
-    la_vector_t vel_i_unit = la_vector_unit(vel_i, &vel_i_norm);
+    la_float vel_i_unit[3] = {0};
+    la_float vel_i_norm = la_vec_unit(vel_i, vel_i_unit, 3);
 
-    if (range_norm < 1 || vel_i_norm < DBL_EPSILON) {
-        ESP_LOGI(TAG, "low range");
+    if (vel_i_norm == 0.0) {
+        ESP_LOGW(TAG, "PURSUIT: low interceptor velocity");
         return false;
     }
 
     // component of LOS along velocity
-    la_vector_t r_along_vel_i = la_vector_scale(
-        &vel_i_unit, 
-        la_vector_dot(&range_unit, &vel_i_unit));
+    la_float r_along_vel_i[3] = {0};
+    la_scale(vel_i_unit, la_vec_dot(range_unit, vel_i_unit, 3), r_along_vel_i, 3);
 
     // component of LOS perpendicular to velocity
-    la_vector_t r_perp_vel_i = la_vector_subtract(&range_unit, &r_along_vel_i);
+    la_float r_perp_vel_i[3] = {0};
+    la_sub(range_unit, r_along_vel_i, r_perp_vel_i, 3);
 
-    double r_perp_vel_i_norm = 0.0;
-    la_vector_t r_perp_vel_i_unit = la_vector_unit(&r_perp_vel_i, &r_perp_vel_i_norm);
+    la_float r_perp_vel_i_unit[3];
+    la_float r_perp_vel_i_norm = la_vec_unit(r_perp_vel_i, r_perp_vel_i_unit, 3);
 
     if (r_perp_vel_i_norm > DBL_EPSILON) {
-        double angular_error = asin(_NAV_CLAMP(r_perp_vel_i_norm, -1.0, 1.0));
+        la_float angular_error = la_asin(la_clamp2(r_perp_vel_i_norm, 1.0));
 
-        double accel_norm = N * vel_i_norm * angular_error;
+        la_float accel_norm = N * vel_i_norm * angular_error;
 
-        *accel = la_vector_scale(&r_perp_vel_i_unit, accel_norm);
+        la_scale(r_perp_vel_i_unit, accel_norm, accel, 3);
     }
 
     return true;
 }
 
 bool nav_guidance_pronav_true(
-    double N,
-    const la_vector_t *range,
-    const la_vector_t *vel_i, const la_vector_t *vel_t,
-    la_vector_t *accel) {
+    la_float N,
+    const la_float *range,
+    const la_float *vel_i, 
+    const la_float *vel_t,
+    la_float *accel) {
 
-    la_vector_set_zero(accel);
+    la_zero(accel, 3);
 
     // interceptor velocity norm
-    double vel_i_norm = 0.0;
-    la_vector_t vel_i_unit = la_vector_unit(vel_i, &vel_i_norm);
-    if (vel_i_norm < DBL_EPSILON) {
-        ESP_LOGI(TAG, "vel_i_norm=%lf", vel_i_norm);
+    la_float vel_i_unit[3];
+    la_float vel_i_norm = la_vec_unit(vel_i, vel_i_unit, 3);
+    if (vel_i_norm < LA_EPSILON) {
+        ESP_LOGW(TAG, "PRONAV: low speed");
         return false;
     }
 
-    double range_norm_sq = la_vector_dot(range, range);
+    la_float range_norm_sq = la_vec_dot(range, range, 3);
+
+    if (range_norm_sq < 1) {
+        ESP_LOGW(TAG, "PRONAV: low range");
+        return false;
+    }
 
     // relative speed
-    la_vector_t v = la_vector_subtract(vel_t, vel_i);
-    double v_norm = la_vector_norm(&v);
+    la_float v[3];
+    la_sub(vel_t, vel_i, v, 3);
+    la_float v_norm = la_vec_norm(v, 3);
 
-    if (range_norm_sq < 1 || v_norm < DBL_EPSILON) {
-        ESP_LOGI(TAG, "range_norm_sq=%lf, v_norm=%lf", range_norm_sq, v_norm);
+    if (v_norm < DBL_EPSILON) {
+        ESP_LOGW(TAG, "PRONAV: low relative speed");
         return false;
     }
 
     // LOS angular speed
-    la_vector_t omega = la_vector_cross(range, &v);
-    la_vector_scale_self(&omega, 1.0 / range_norm_sq);
+    la_float omega[3];
+    la_vec_cross_3(range, v, omega);
+    la_scale(omega, 1.0 / range_norm_sq, omega, 3);
 
     // ProNav calculation
-    *accel = la_vector_cross(&vel_i_unit, &omega);
-    la_vector_scale_self(accel, -N * v_norm);
+    la_vec_cross_3(vel_i_unit, omega, accel);
+    la_scale(accel, -N * v_norm, accel, 3);
 
     return true;
 }
 
 nav_guidance_type_t nav_guidance_compute_accel(
     const nav_guidance_t *g,
-    const la_vector_t *range,
-    const la_vector_t *vel_i, const la_vector_t *vel_t,
-    la_vector_t *accel) {
+    const la_float *range,
+    const la_float *vel_i, 
+    const la_float *vel_t,
+    la_float *accel) {
 
-    double range_norm = 0.0;
-    la_vector_t range_unit = la_vector_unit(range, &range_norm);
-    la_vector_t v = la_vector_subtract(vel_t, vel_i);
-    double closing_speed = -la_vector_dot(&v, &range_unit);
+    la_float range_unit[3] = {0};
+    la_float range_norm = la_vec_unit(range, range_unit, 3);
+
+    la_float v[3] = {0};
+    la_sub(vel_t, vel_i, v, 3);
+    la_float closing_speed = -la_vec_dot(v, range_unit, 3);
 
     if (closing_speed < 0 && range_norm > 100) {
         if (nav_guidance_pursuit(g->N, range, vel_i, accel)) {
@@ -144,34 +152,36 @@ void nav_guidance_compute_command(
     const nav_guidance_state_t *i, 
     const nav_guidance_state_t *t,
     nav_guidance_command_t *command) {
-    NAV_GUIDANCE_COMMAND_SET_ZERO(command)
+    // zero command
+    memset(command, 0, sizeof(nav_guidance_command_t));
 
     // target NED coordinates relatively to the interceptor
-    la_vector_t range = {0};
-    nav_state_to_ned(i, t, &range);
+    la_float range[3] = {0};
+    nav_state_to_ned(i, t, range);
 
     // interceptor and target velocities in NED (down is positive)
-    la_vector_t vel_i = { .x = i->vel_north, .y = i->vel_east, .z = -i->vel_up, };
-    la_vector_t vel_t = { .x = t->vel_north, .y = t->vel_east, .z = -t->vel_up, };
+    la_float vel_i[3] = { i->vel_north, i->vel_east, -i->vel_up, };
+    la_float vel_t[3] = { t->vel_north, t->vel_east, -t->vel_up, };
 
     // compute commanded acceleration perpendicular to the interceptor speed vector
-    command->type = nav_guidance_compute_accel(g, &range, &vel_i, &vel_t, &command->accel);
+    command->type = nav_guidance_compute_accel(g, range, vel_i, vel_t, command->accel);
 
     // compute lateral and vertical acceleration components
-    la_vector_t vel_horizontal = { .x = vel_i.x, .y = vel_i.y, .z = 0.0 };
-    la_vector_t down_unit = { .x = 0, .y = 0, .z = 1.0 };
+    la_float vel_horizontal[3] = { vel_i[0], vel_i[1], 0.0 };
+    la_float down_unit[3] = { 0, 0, 1.0 };
 
-    la_vector_t lateral_unit = la_vector_cross(&down_unit, &vel_horizontal);
-    double lateral_unit_norm = la_vector_norm(&lateral_unit);
-    if (lateral_unit_norm < DBL_EPSILON) {
+    la_float lateral_unit[3];
+    la_vec_cross_3(down_unit, vel_horizontal, lateral_unit);
+    float lateral_unit_norm = la_vec_norm(lateral_unit, 3);
+    if (lateral_unit_norm < LA_EPSILON) {
         return;
     }
-    la_vector_scale_self(&lateral_unit, 1.0 / lateral_unit_norm);
+    la_scale(lateral_unit, 1.0 / lateral_unit_norm, lateral_unit, 3);
 
-    command->accel_lateral = la_vector_dot(&command->accel, &lateral_unit);
-    command->accel_vertical = la_vector_dot(&command->accel, &down_unit);
-    command->roll_deg = _NAV_RAD_TO_DEG(atan2(command->accel_lateral, NAV_G));
-    command->pitch_deg = _NAV_RAD_TO_DEG(-asin(_NAV_CLAMP(command->accel_vertical / NAV_G, -1.0, 1.0)));
-    command->roll_cmd = _NAV_CLAMP2(command->roll_deg / g->max_roll_deg, 1.0);
-    command->pitch_cmd = _NAV_CLAMP2(command->pitch_deg / g->max_pitch_deg, 1.0);
+    command->accel_lateral = la_vec_dot(command->accel, lateral_unit, 3);
+    command->accel_vertical = la_vec_dot(command->accel, down_unit, 3);
+    command->roll_deg = _NAV_RAD_TO_DEG(la_atan2(command->accel_lateral, NAV_G));
+    command->pitch_deg = _NAV_RAD_TO_DEG(-la_asin(la_clamp2(command->accel_vertical / NAV_G, 1.0)));
+    command->roll_cmd = la_clamp2(command->roll_deg / g->max_roll_deg, 1.0);
+    command->pitch_cmd = la_clamp2(command->pitch_deg / g->max_pitch_deg, 1.0);
 }

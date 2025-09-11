@@ -2,6 +2,7 @@
 
 #include "libcrsf_crc8.h"
 #include "libcrsf_def.h"
+#include "libcrsf_device_param.h"
 
 #include <esp_log.h>
 #include <string.h>
@@ -114,8 +115,8 @@ bool crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payl
             payload->value.select_index = *(uint8_t *)ptr;
             break;
         case CRSF_PARAM_TYPE_COMMAND:
-            ESP_LOGE(TAG, "COMMAND not implemented");
-            return false;
+            payload->value.command_action = (crsf_device_command_state_t)(*(uint8_t *)ptr);
+            break;
         case CRSF_PARAM_TYPE_FOLDER:
             break;
         case CRSF_PARAM_TYPE_INFO:
@@ -140,7 +141,9 @@ bool crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payl
 bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payload_timing_correction_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_RADIO_ID) {
         uint8_t subtype = frame->data[2];
-        if ((subtype == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) && frame->length == 13) {
+        if ((subtype == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) && 
+            frame->length == CRSF_PAYLOAD_LENGTH_RADIO_ID) {
+
             payload->dest = frame->data[0];
             payload->source = frame->data[1];
             payload->interval_100ns = be32toh(*(uint32_t *)(frame->data + 3));
@@ -208,19 +211,19 @@ void crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_c
     PACK_CHANNEL(0, payload->channels[0], 0);
     PACK_CHANNEL(1, payload->channels[1], 11);
     PACK_CHANNEL(2, payload->channels[2], 22);
-    PACK_CHANNEL(3, payload->channels[4],  33);
-    PACK_CHANNEL(4, payload->channels[5],  44);
-    PACK_CHANNEL(5, payload->channels[6],  55);
-    PACK_CHANNEL(6, payload->channels[7],  66);
-    PACK_CHANNEL(7, payload->channels[8],  77);
-    PACK_CHANNEL(8, payload->channels[9],  88);
-    PACK_CHANNEL(9, payload->channels[10],  99);
-    PACK_CHANNEL(10, payload->channels[11], 110);
-    PACK_CHANNEL(11, payload->channels[12], 121);
-    PACK_CHANNEL(12, payload->channels[13], 132);
-    PACK_CHANNEL(13, payload->channels[14], 143);
-    PACK_CHANNEL(14, payload->channels[15], 154);
-    PACK_CHANNEL(15, payload->channels[16], 165);
+    PACK_CHANNEL(3, payload->channels[3],  33);
+    PACK_CHANNEL(4, payload->channels[4],  44);
+    PACK_CHANNEL(5, payload->channels[5],  55);
+    PACK_CHANNEL(6, payload->channels[6],  66);
+    PACK_CHANNEL(7, payload->channels[7],  77);
+    PACK_CHANNEL(8, payload->channels[8],  88);
+    PACK_CHANNEL(9, payload->channels[9],  99);
+    PACK_CHANNEL(10, payload->channels[10], 110);
+    PACK_CHANNEL(11, payload->channels[11], 121);
+    PACK_CHANNEL(12, payload->channels[12], 132);
+    PACK_CHANNEL(13, payload->channels[13], 143);
+    PACK_CHANNEL(14, payload->channels[14], 154);
+    PACK_CHANNEL(15, payload->channels[15], 165);
 
     frame->data[frame->length - 2] = crsf_calc_crc8(frame);
 }
@@ -342,8 +345,10 @@ void crsf_payload_pack__param_entry(crsf_frame_t *frame,
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, select);
             break;
         case CRSF_PARAM_TYPE_COMMAND:
-            ESP_LOGE(TAG, "COMMAND not implemented");
-            assert(false);
+            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.command.state, 1);
+            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.command.timeout, 1);
+            _CRSF_PAYLOAD_WRITE_STRING(frame->data, i, payload->value.command.status);
+            break;
         case CRSF_PARAM_TYPE_FOLDER:
             _CRSF_PAYLOAD_WRITE_STRING(frame->data, i, payload->value.folder);
             break;
@@ -374,6 +379,8 @@ bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interv
         *(uint32_t *)(frame->data + 3) = htobe32(interval_100ns);
         *(uint32_t *)(frame->data + 7) = htobe32((uint32_t)offset_100ns);
 
+        frame->data[frame->length - 2] = crsf_calc_crc8(frame);
+
         return true;
     }
     return false;
@@ -384,7 +391,7 @@ bool crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int1
         (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
 
         uint8_t *data = frame->data;
-        PACK_CHANNEL(channel, value, channel * 11);
+        PACK_CHANNEL(channel - 1, value, channel * 11);
 
         return true;
     }

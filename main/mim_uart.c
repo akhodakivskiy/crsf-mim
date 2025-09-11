@@ -1,12 +1,15 @@
 #include "mim_uart.h"
 
+#include "driver/gptimer_types.h"
 #include "driver/uart.h"
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "hal/uart_types.h"
 #include "libcrsf.h"
 #include "libcrsf_def.h"
 #include "libcrsf_def.h"
 #include "libcrsf_payload.h"
+#include "portmacro.h"
 #include "soc/gpio_num.h"
 #include "util.h"
 #include "util_lqcalc.h"
@@ -15,6 +18,7 @@
 #include <soc/uart_periph.h>
 #include <esp_log.h>
 #include <esp_timer.h>
+#include <driver/gptimer.h>
 
 static const char *TAG= "MIM_UART";
 static const char *TAG_CONTROLLER = "MIM_UART_CONTROLLER";
@@ -23,6 +27,7 @@ static const char *TAG_MODULE = "MIM_UART_MODULE";
 #define MIM_UART_WDT_TIMEOUT 1000000 // 1 second
 #define MIM_UART_AUTOBAUD_TIMEOUT 500000 // 500 milliseconds
 static const int32_t MIM_UART_BAUD_RATES[] = {400000, 115200, 5250000, 3750000, 1870000, 921600, 2250000};
+static const int32_t MIM_UART_PACKET_RATES[] = {250, 62, 500, 500, 500, 500, 250};
 
 bool _is_init = false;
 
@@ -40,6 +45,7 @@ uart_port_t _port_module = UART_NUM_MAX;
 QueueHandle_t _queue_uart_module = NULL;
 QueueHandle_t _queue_crsf_module = NULL;
 TaskHandle_t _task_module = NULL;
+gptimer_handle_t _timer_module;
 
 util_lqcalc_t _lq = {0};
 int64_t _last_uart_wdt_time = 0;
@@ -53,6 +59,9 @@ static bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_
 static void _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
 static void _task_controller_impl(void *arg);
 static void _task_module_impl(void *arg);
+static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx);
+static void _timer_init(gptimer_handle_t *handle, SemaphoreHandle_t semaphore, uint32_t period_us);
+static void _timer_set_alarm_period(gptimer_handle_t handle, int32_t offset_us, uint32_t interval_us);
 static void _uart_wdt();
 static uint32_t _autobaud();
 
@@ -217,10 +226,6 @@ static void _task_controller_impl(void *arg) {
                     assert(xQueueOverwrite(_queue_crsf_controller, &frame) == pdTRUE);
 
                     if (xQueueReceive(_queue_crsf_module, &frame, 0) == pdTRUE) {
-                        if (_handler_module != NULL) {
-                            _handler_module(&frame);
-                        }
-
                         _uart_half_duplex_set_tx(_port_controller, _pin_controller);
                         _uart_write_crsf_frame(_port_controller, &frame);
                         _uart_half_duplex_set_rx(_port_controller, _pin_controller);
@@ -237,9 +242,15 @@ static void _task_controller_impl(void *arg) {
 }
 
 static void _task_module_impl(void *arg) {
+    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
+    // start with highest rate possible in CRSF
+    // this will be adjusted with timing correction frames
+    _timer_init(&_timer_module, sem, 1000000 / 500); 
+    xSemaphoreGive(sem);
+
     _uart_init_port(_port_module, _pin_module, &_queue_uart_module);
 
-    _uart_half_duplex_set_rx(_port_module, _pin_module);
+    _uart_half_duplex_set_tx(_port_module, _pin_module);
 
     bool is_frame_ready = false;
     crsf_frame_t frame;
@@ -250,18 +261,16 @@ static void _task_module_impl(void *arg) {
     ESP_LOGI(TAG, "module task started");
 
     while (true) {
-        if (xQueueReceive(_queue_crsf_controller, &frame, portMAX_DELAY) == pdTRUE) {
+        xSemaphoreTake(sem, portMAX_DELAY);
+        if (xQueueReceive(_queue_crsf_controller, &frame, 0) == pdTRUE) {
             int64_t time_start = esp_timer_get_time();
-
-            _uart_half_duplex_set_tx(_port_module, _pin_module);
             _uart_write_crsf_frame(_port_module, &frame);
+
             _uart_half_duplex_set_rx(_port_module, _pin_module);
             xQueueReset(_queue_uart_module);
 
             int64_t time_rx = esp_timer_get_time();
-            int64_t period_remaining_ms = (interval_us - (time_rx - time_start)) / 1000;
-
-            //ESP_LOGI(TAG_MODULE, "period_remaining=%lli, ticks=%lu", period_remaining_ms, pdMS_TO_TICKS(period_remaining_ms));
+            int64_t period_remaining_ms = (interval_us - (time_rx - time_start)) / 1000 - 1;
 
             if (xQueueReceive(_queue_uart_module, &event, pdMS_TO_TICKS(period_remaining_ms > 0 ? period_remaining_ms : 1)) == pdTRUE) {
                 if (event.type == UART_DATA) {
@@ -271,17 +280,73 @@ static void _task_module_impl(void *arg) {
                         crsf_payload_timing_correction_t payload;
                         if ((frame.type == CRSF_FRAME_TYPE_RADIO_ID) &&
                             (crsf_payload_unpack__timing_correction(&frame, &payload))) {
+                            int32_t offset_us = payload.offset_100ns / 10;
                             interval_us = payload.interval_100ns / 10;
-                            //ESP_LOGI(TAG_MODULE, "tining connection, period=%lu, offset=%li", payload.interval_100ns / 10, payload.offset_100ns / 10);
+                            _timer_set_alarm_period(_timer_module, -offset_us, interval_us);
+                            ESP_LOGI(TAG_MODULE, "timing correction, offset=%li, period=%lu", offset_us, interval_us);
                         }
+
+                        if (_handler_module != NULL) {
+                            _handler_module(&frame);
+                        }
+
                         assert(xQueueSend(_queue_crsf_module, &frame, 0) == pdTRUE);
                     }
                 } else {
                     //ESP_LOGI(TAG_MODULE, "unhandled uart event=%u", event.type);
                 }
             }
+
+            _uart_half_duplex_set_tx(_port_module, _pin_module);
         }
     }
+}
+
+static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx) {
+    BaseType_t pxHigherPriorityTaskWoken;
+    xSemaphoreGiveFromISR((SemaphoreHandle_t *)(ctx), &pxHigherPriorityTaskWoken);
+    return pxHigherPriorityTaskWoken;
+}
+
+static void _timer_init(gptimer_handle_t *handle, SemaphoreHandle_t semaphore, uint32_t period_us) {
+    gptimer_handle_t timer = NULL;
+    gptimer_config_t timer_config = {
+        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+        .direction = GPTIMER_COUNT_UP,
+        .resolution_hz = 1 * 1000 * 1000,
+    };
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &timer));
+
+    gptimer_alarm_config_t alarm_config = {
+        .reload_count = 0,
+        .alarm_count = period_us,
+        .flags.auto_reload_on_alarm = true,
+    };
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
+
+    gptimer_event_callbacks_t cbs = {
+        .on_alarm = _timer_isr,
+    };
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(timer, &cbs, semaphore));
+
+    ESP_ERROR_CHECK(gptimer_enable(timer));
+    ESP_ERROR_CHECK(gptimer_start(timer));
+
+    *handle = timer;
+}
+
+static void _timer_set_alarm_period(gptimer_handle_t timer, int32_t offset, uint32_t interval_us) {
+    uint64_t count = 0;
+    ESP_ERROR_CHECK(gptimer_get_raw_count(timer, &count));
+    int64_t count_new = (int64_t)count + offset;
+    ESP_ERROR_CHECK(gptimer_set_raw_count(timer, count_new >= 0 ? count_new : 0));
+
+    gptimer_alarm_config_t alarm_config = {
+        .reload_count = 0,
+        .alarm_count = interval_us,
+        .flags.auto_reload_on_alarm = true,
+    };
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
 }
 
 static void _uart_wdt() {
@@ -297,17 +362,19 @@ static void _uart_wdt() {
         uint32_t baud = _autobaud();
         if (baud > 0) {
             uint32_t best_baud = baud;
+            uint32_t best_packet_rate = 100;
             uint32_t best_diff = UINT32_MAX;
 
             for (int i = 0; i < ARRAY_LENGTH(MIM_UART_BAUD_RATES); i++) {
                 uint32_t diff = abs((int32_t)MIM_UART_BAUD_RATES[i] - (int32_t)baud);
                 if (diff < best_diff) {
                     best_baud = MIM_UART_BAUD_RATES[i];
+                    best_packet_rate = MIM_UART_PACKET_RATES[i];
                     best_diff = diff;
                 }
             }
 
-            ESP_LOGI(TAG, "baud rate detected at %lu, nearest %lu", baud, best_baud);
+            ESP_LOGI(TAG, "baud rate detected at %lu, packet_rate=%lu, nearest %lu", baud, best_packet_rate, best_baud);
 
             baud = best_baud;
 
@@ -315,6 +382,8 @@ static void _uart_wdt() {
             _uart_half_duplex_set_rx(_port_controller, _pin_controller);
             uart_set_baudrate(_port_module, baud);
             _uart_half_duplex_set_rx(_port_module, _pin_module);
+
+            _timer_set_alarm_period(_timer_module, 0, 1000000 / best_packet_rate);
 
             util_lqcalc_reset_100(&_lq);
 

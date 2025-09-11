@@ -17,6 +17,7 @@ TEST_CASE("test rc channels", "libcrsf")  {
 
     TEST_ASSERT(crsf_payload_unpack__rc_channels(&frame, &payload_out));
 
-    TEST_ASSERT_EQUAL_MEMORY(&payload_in, &payload_out, sizeof(crsf_payload_rc_channels_t));
-    TEST_ASSERT_EQUAL(payload_in.channels[0], payload_out.channels[0]);
+    for (int i = 0; i < 16; i++) {
+        TEST_ASSERT_EQUAL(payload_in.channels[i], payload_out.channels[i]);
+    }
 }

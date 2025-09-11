@@ -10,8 +10,8 @@
 #include "libcrsf.h"
 #include "libcrsf_device.h"
 #include "libcrsf_device_param.h"
-#include "libcrsf_payload.h"
 
+#include "mim_rc.h"
 
 #include <stdint.h>
 #include <esp_log.h>
@@ -21,9 +21,21 @@
 
 #define MIM_CRSF_DEVICE_SERIAL 0x04423448
 
+typedef enum {
+    _MIM_MENU_TEST_RC_IDLE,
+    _MIM_MENU_TEST_RC_START,
+    _MIM_MENU_TEST_RC_ROLL_LEFT,
+    _MIM_MENU_TEST_RC_ROLL_RIGHT,
+    _MIM_MENU_TEST_RC_PITCH_UP,
+    _MIM_MENU_TEST_RC_PITCH_DOWN,
+    _MIM_MENU_TEST_RC_FINISH,
+} _mim_menu_test_rc_state_t;
+
 static const char *TAG = "MENU";
 
 static skymap_t *_skymap = NULL;
+
+static _mim_menu_test_rc_state_t _test_rc_state = _MIM_MENU_TEST_RC_IDLE;
 
 void _param_select_engage_channel_get(crsf_device_param_read_value_t *value) {
     uint8_t channel = mim_settings_get()->engage_channel;
@@ -150,8 +162,86 @@ void _param_u8_guidance_max_pitch_deg_set(const crsf_device_param_write_value_t 
     mim_settings_save();
 }
 
+void _param_command_test_rc_get(crsf_device_param_read_value_t *value) {
+    switch (_test_rc_state) {
+        case _MIM_MENU_TEST_RC_IDLE:
+            value->command.state = CRSF_COMMAND_STATE_READY;
+            value->command.status = "";
+            value->command.timeout = 1;
+            break;
+        case _MIM_MENU_TEST_RC_START:
+            value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+            value->command.status = "starting...";
+            value->command.timeout = 100;
+            break;
+        case _MIM_MENU_TEST_RC_ROLL_LEFT:
+            value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+            value->command.status = "roll left";
+            value->command.timeout = 200;
+            break;
+        case _MIM_MENU_TEST_RC_ROLL_RIGHT:
+            value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+            value->command.status = "roll right";
+            value->command.timeout = 200;
+            break;
+        case _MIM_MENU_TEST_RC_PITCH_UP:
+            value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+            value->command.status = "pitch up";
+            value->command.timeout = 200;
+            break;
+        case _MIM_MENU_TEST_RC_PITCH_DOWN:
+            value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+            value->command.status = "pitch down";
+            value->command.timeout = 200;
+            break;
+        case _MIM_MENU_TEST_RC_FINISH:
+            assert(false);
+        default:
+            break;
+    }
+}
+
+void _param_command_test_rc_set(const crsf_device_param_write_value_t *value) {
+    switch (value->command_action) {
+        case CRSF_COMMAND_STATE_START:
+            _test_rc_state = _MIM_MENU_TEST_RC_START;
+            break;
+        case CRSF_COMMAND_STATE_POLL:
+            _test_rc_state += 1;
+            if (_test_rc_state == _MIM_MENU_TEST_RC_FINISH) {
+                _test_rc_state = _MIM_MENU_TEST_RC_IDLE;
+            }
+            mim_rc_clear_overrides();
+            switch (_test_rc_state) {
+                case _MIM_MENU_TEST_RC_ROLL_LEFT:
+                    mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, -1, MIM_RC_OVERRIDE_LEVEL_TEST);
+                    break;
+                case _MIM_MENU_TEST_RC_ROLL_RIGHT:
+                    mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, 1, MIM_RC_OVERRIDE_LEVEL_TEST);
+                    break;
+                case _MIM_MENU_TEST_RC_PITCH_UP:
+                    mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, 1, MIM_RC_OVERRIDE_LEVEL_TEST);
+                    break;
+                case _MIM_MENU_TEST_RC_PITCH_DOWN:
+                    mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, -1, MIM_RC_OVERRIDE_LEVEL_TEST);
+                    break;
+                default:
+                    break;
+            }
+        default:
+            break;
+    }
+}
+
 void mim_menu_init(crsf_device_t *device) {
     crsf_device_init(device, CRSF_ADDRESS_CRSF_MIM, "crsf-mim", MIM_CRSF_DEVICE_SERIAL);
+
+    crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
+                          _param_folder_guidance_get, NULL);
+
+    crsf_device_add_param(device, "test RC", CRSF_PARAM_TYPE_COMMAND, NULL,
+                          _param_command_test_rc_get,
+                          _param_command_test_rc_set);
 
     crsf_device_add_param(device, "mode", CRSF_PARAM_TYPE_SELECT, NULL, 
                           _param_select_mode_get, 
@@ -168,9 +258,6 @@ void mim_menu_init(crsf_device_t *device) {
                           _param_u8_engage_channel_get, 
                           _param_u8_engage_channel_set);
 
-    crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
-                          _param_folder_guidance_get, NULL);
-
     crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, guidance, 
                           _param_float_guidance_N_get, 
                           _param_float_guidance_N_set);
@@ -180,6 +267,7 @@ void mim_menu_init(crsf_device_t *device) {
     crsf_device_add_param(device, "max pitch", CRSF_PARAM_TYPE_UINT8, guidance, 
                           _param_u8_guidance_max_pitch_deg_get, 
                           _param_u8_guidance_max_pitch_deg_set);
+
 }
 
 void mim_menu_set_skymap(skymap_t *sm) {

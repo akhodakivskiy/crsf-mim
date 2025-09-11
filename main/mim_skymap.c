@@ -8,6 +8,7 @@
 #include "libnet.h"
 #include "mim_menu.h"
 #include "mim_settings.h"
+#include "mim_rc.h"
 #include "nav_guidance.h"
 
 #include <esp_netif_ip_addr.h>
@@ -56,6 +57,10 @@ void mim_skymap_init() {
     _skymap_ctx.guidance_config.max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg;
 
     assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, configMAX_PRIORITIES - 3, &_task_skymap, APP_CPU_NUM) == pdPASS);
+}
+
+bool mim_skymap_guidance_is_enabled() {
+    return _skymap_ctx.guidance_enabled;
 }
 
 void mim_skymap_guidance_enable(bool enable) {
@@ -180,5 +185,12 @@ static void _skymap_update() {
             &state_target,
             &_skymap_ctx.guidance_command
         );
+
+        if (_skymap_ctx.guidance_command.type == NAV_GUIDANCE_NONE) {
+            mim_rc_clear_overrides();
+        } else {
+            mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, _skymap_ctx.guidance_command.roll_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+            mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, _skymap_ctx.guidance_command.pitch_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+        }
     }
 }

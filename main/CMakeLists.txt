@@ -4,6 +4,7 @@ idf_component_register(
     "mim_uart.c"
     "mim_settings.c"
     "mim_skymap.c"
+    "mim_rc.c" 
     "main_rx.c" 
     "main_tx.c" 
   INCLUDE_DIRS "."

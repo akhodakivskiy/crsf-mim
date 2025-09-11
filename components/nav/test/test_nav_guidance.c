@@ -2,105 +2,105 @@
 
 #include <esp_log.h>
 
+#include "la.h"
 #include "nav_guidance.h"
-#include "nav_vector.h"
 
 static const char *TAG = "TEST_NAV";
 
 /* pursuit tests */
 
 TEST_CASE("pursuit aligned", "nav") {
-    nav_vector_t range = { .x = 100, .y = 0, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
+    la_float range[3] = { 100, 0, 0 };
+    la_float vel_i[3] = { 10, 0, 0 };
 
-    nav_vector_t accel = {0};
+    la_float accel[3] = {0, 0, 0};
 
-    bool result = nav_guidance_pursuit(3.0, &range, &vel_i, &accel);
+    bool result = nav_guidance_pursuit(3, range, vel_i, accel);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT(accel.y == 0);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT(accel[1] == 0);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 TEST_CASE("pursuit right", "nav") {
-    nav_vector_t range = { .x = 100, .y = 10, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
+    la_float range[3] = {100,  10,  0 };
+    la_float vel_i[3] = {10,  0,  0 };
 
-    nav_vector_t accel = {0};
+    la_float accel[3] = {0, 0, 0};
 
-    bool result = nav_guidance_pursuit(3.0, &range, &vel_i, &accel);
+    bool result = nav_guidance_pursuit(3, range, vel_i, accel);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, 2.99, accel.y);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 2.99, accel[1]);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 TEST_CASE("pursuit left", "nav") {
-    nav_vector_t range = { .x = 100, .y = -10, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
+    la_float range[3] = { 100, -10, 0 };
+    la_float vel_i[3] = { 10, 0, 0 };
 
-    nav_vector_t accel = {0};
+    la_float accel[3] = { 0, 0, 0};
 
-    bool result = nav_guidance_pursuit(3.0, &range, &vel_i, &accel);
+    bool result = nav_guidance_pursuit(3, range, vel_i, accel);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, -2.99, accel.y);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, -2.99, accel[1]);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 
 /* proportional navigation tests */
 
 TEST_CASE("pronav aligned", "nav") {
-    nav_vector_t range = { .x = 100, .y = 0, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
-    nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
+    la_float range[3] = { 100, 0, 0 };
+    la_float vel_i[3] = { 10, 0, 0 };
+    la_float vel_t[3] = { 5, 0, 0 };
 
-    nav_vector_t accel = { .x = 0, .y = 0, .z = 0 };
+    la_float accel[3] = { 0, 0, 0 };
 
-    bool result = nav_guidance_pronav_true(3.0, &range, &vel_i, &vel_t, &accel);
+    bool result = nav_guidance_pronav_true(3.0, range, vel_i, vel_t, accel);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT(accel.y == 0);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT(accel[1] == 0);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 TEST_CASE("pronav right", "nav") {
-    nav_vector_t range = { .x = 100, .y = 10, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
-    nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
+    la_float range[3] = { 100, 10, 0 };
+    la_float vel_i[3] = { 10, 0, 0 };
+    la_float vel_t[3] = { 5, 0, 0 };
 
-    nav_vector_t accel = { .x = 0, .y = 0, .z = 0 };
+    la_float accel[3] = { 0, 0, 0 };
 
-    bool result = nav_guidance_pronav_true(3.0, &range, &vel_i, &vel_t, &accel);
+    bool result = nav_guidance_pronav_true(3.0, range, vel_i, vel_t, accel);
 
     //ESP_LOGI(TAG, "ax: %lf, ay: %lf, az: %lf", accel.x, accel.y, accel.z);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, 0.074257, accel.y);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001, 0.074257, accel[1]);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 TEST_CASE("pronav left", "nav") {
-    nav_vector_t range = { .x = 100, .y = -10, .z = 0 };
-    nav_vector_t vel_i = { .x = 10, .y = 0, .z = 0 };
-    nav_vector_t vel_t = { .x = 5, .y = 0, .z = 0 };
+    la_float range[3] = { 100, -10, 0 };
+    la_float vel_i[3] = { 10, 0, 0 };
+    la_float vel_t[3] = { 5, 0, 0 };
 
-    nav_vector_t accel = { .x = 0, .y = 0, .z = 0 };
+    la_float accel[3] = { 0, 0, 0 };
 
-    bool result = nav_guidance_pronav_true(3.0, &range, &vel_i, &vel_t, &accel);
+    bool result = nav_guidance_pronav_true(3.0, range, vel_i, vel_t, accel);
 
     //ESP_LOGI(TAG, "ax: %lf, ay: %lf, az: %lf", accel.x, accel.y, accel.z);
 
     TEST_ASSERT(result == true);
-    TEST_ASSERT(accel.x == 0);
-    TEST_ASSERT_DOUBLE_WITHIN(0.0001, -0.074257, accel.y);
-    TEST_ASSERT(accel.z == 0);
+    TEST_ASSERT(accel[0] == 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001, -0.074257, accel[1]);
+    TEST_ASSERT(accel[2] == 0);
 }
 
 /* guidance tests */
@@ -135,8 +135,8 @@ TEST_CASE("guidance pronav", "nav") {
     nav_guidance_compute_command(&g, &ic, &tg, &c);
 
     TEST_ASSERT(c.type == NAV_GUIDANCE_PRONAV);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, 0.18, c.roll_cmd);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, 0.013, c.pitch_cmd);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 0.18, c.roll_cmd);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 0.013, c.pitch_cmd);
 }
 
 TEST_CASE("guidance pursuit", "nav") {
@@ -169,6 +169,6 @@ TEST_CASE("guidance pursuit", "nav") {
     nav_guidance_compute_command(&g, &ic, &tg, &c);
 
     TEST_ASSERT(c.type == NAV_GUIDANCE_PURSUIT);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, 1.0, c.roll_cmd);
-    TEST_ASSERT_DOUBLE_WITHIN(0.001, 0.129, c.pitch_cmd);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 1.0, c.roll_cmd);
+    TEST_ASSERT_FLOAT_WITHIN(0.001, 0.129, c.pitch_cmd);
 }
