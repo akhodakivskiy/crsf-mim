@@ -1,4 +1,5 @@
 #include "async_logging.h"
+#include "portmacro.h"
 #include <sdkconfig.h>
 
 #include <stdio.h>
@@ -54,12 +55,12 @@ int IRAM_ATTR _logging_vprintf(const char *format, va_list arg) {
 }
 #endif
 
-void async_logging_init(uint32_t core_id) {
+void async_logging_init(BaseType_t priority, BaseType_t core_id) {
 #if CONFIG_ASYNC_LOGGING_ENABLED == 1
     assert(!_logging_init);
     _logging_init = true;
     _buffer = xRingbufferCreate(CONFIG_ASYNC_LOGGING_BUFFER_LEN, RINGBUF_TYPE_BYTEBUF);
-    xTaskCreatePinnedToCore(_logging_loop, "logging", 4096, NULL, configMAX_PRIORITIES - 3, &_logging_task_handle, core_id);
+    xTaskCreatePinnedToCore(_logging_loop, "task_logging", 4096, NULL, priority, &_logging_task_handle, core_id);
     _defalut_vprintf = esp_log_set_vprintf(_logging_vprintf);
     ESP_LOGI(TAG, "async logging init");
 #endif

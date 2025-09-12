@@ -27,7 +27,7 @@ void skymap_init(skymap_t *sm) {
     sm->last_time_target = 0;
 }
 
-void skymap_update(skymap_t *sm, int64_t time) {
+void IRAM_ATTR skymap_update(skymap_t *sm, int64_t time) {
     sm->last_time = time;
     sm->is_connected = (time > SKYMAP_CONNECTION_TIMEOUT_US) && 
         ((time - sm->last_time_server_message) > SKYMAP_CONNECTION_TIMEOUT_US);
@@ -41,7 +41,7 @@ void skymap_update(skymap_t *sm, int64_t time) {
         sm->interceptor.has_position && sm->interceptor.has_velocity;
 }
 
-skymap_err_t skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len) {
+skymap_err_t IRAM_ATTR skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len) {
     assert(data != NULL && len > 0);
 
     skymap_err_t err = SKYMAP_OK;
@@ -87,7 +87,7 @@ skymap_err_t skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *dat
     return err;
 }
 
-skymap_err_t skymap_write_client_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written) {
+skymap_err_t IRAM_ATTR skymap_write_client_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written) {
     skymap_err_t err = SKYMAP_OK;
 
     ai_skyfortress_guidance_ClientMessage m = ai_skyfortress_guidance_ClientMessage_init_default;

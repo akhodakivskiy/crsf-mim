@@ -2,6 +2,7 @@
 #include "util.h"
 
 #include <string.h>
+#include <freertos/FreeRTOS.h>
 
 #include "libcrsf_def.h"
 #include "la.h"
@@ -18,18 +19,18 @@ typedef struct {
 
 mim_rc_override_t _overrides[16] = {0};
 
-void mim_rc_clear_overrides() {
+void IRAM_ATTR mim_rc_clear_overrides() {
     memset(_overrides, 0, sizeof(_overrides));
 }
 
-void mim_rc_override_channel(uint8_t channel, float value, mim_rc_override_level_t level) {
+void IRAM_ATTR mim_rc_override_channel(uint8_t channel, float value, mim_rc_override_level_t level) {
     if (_overrides[channel - 1].level <= level) {
         _overrides[channel - 1].value = value;
         _overrides[channel - 1].level = level;
     }
 }
 
-uint16_t mim_rc_apply_override(uint8_t channel, uint16_t value) {
+uint16_t IRAM_ATTR mim_rc_apply_override(uint8_t channel, uint16_t value) {
     uint16_t result = 0;
     if (_overrides[channel - 1].level > MIM_RC_OVERRIDE_LEVEL_NONE) {
         float g = _overrides[channel - 1].value;

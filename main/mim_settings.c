@@ -104,7 +104,7 @@ esp_err_t mim_settings_save(void) {
     return ret;
 }
 
-const mim_settings_t* mim_settings_get(void) {
+const IRAM_ATTR mim_settings_t* mim_settings_get(void) {
     if (!mim_settings_initialized) {
         return NULL;
     }

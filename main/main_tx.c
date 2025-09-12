@@ -7,6 +7,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/task.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <driver/uart.h>
@@ -31,6 +32,10 @@ static const char *TAG_CONTROLLER = "MAIN_TX_CONTROLLER";
 static const char *TAG_MODULE = "MAIN_TX_MODULE";
 static const char *TAG_SKYMAP = "MAIN_TX_SKYMAP";
 
+#define PRIORITY_TASK_ASYNC_LOGGING (configMAX_PRIORITIES - 5)
+#define PRIORITY_TASK_SKYMAP (configMAX_PRIORITIES - 3)
+#define PRIORITY_TASK_CONTROLLER (configMAX_PRIORITIES - 2)
+#define PRIORITY_TASK_MODULE (configMAX_PRIORITIES - 1)
 
 #define UART_PORT_CONTROLLER UART_NUM_1
 #define UART_PORT_MODULE UART_NUM_2
@@ -60,24 +65,25 @@ void app_main(void) {
     memset(&_counter_module, 0, sizeof(frame_counter_t));
     _counter_module.name = "MODULE";
 
-    async_logging_init(PRO_CPU_NUM);
+    async_logging_init(PRIORITY_TASK_ASYNC_LOGGING, PRO_CPU_NUM);
 
     // init and load settings
     mim_settings_init();
     mim_settings_load();
 
     // init UART tasks and set frame handler
-    mim_uart_init(UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, UART_PORT_MODULE, UART_PIN_MODULE);
+    mim_uart_init(PRIORITY_TASK_CONTROLLER, UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, 
+                  PRIORITY_TASK_MODULE, UART_PORT_MODULE, UART_PIN_MODULE);
     mim_uart_set_controller_handler(_frame_handler_controller);
     mim_uart_set_module_handler(_frame_handler_module);
 
     // init CRSF device menu
     mim_menu_init(&crsf_device);
 
-    mim_skymap_init();
+    mim_skymap_init(PRIORITY_TASK_SKYMAP);
 }
 
-static void _frame_handler_controller(crsf_frame_t *frame) {
+static IRAM_ATTR void _frame_handler_controller(crsf_frame_t *frame) {
     _count_frames(frame, &_counter_controller);
 
     crsf_frame_t frame_out;
@@ -92,7 +98,7 @@ static void _frame_handler_controller(crsf_frame_t *frame) {
     }
 }
 
-static void _frame_handler_module(crsf_frame_t *frame) {
+static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
     _count_frames(frame, &_counter_module);
 
     /*
@@ -113,7 +119,7 @@ static void _frame_handler_module(crsf_frame_t *frame) {
     */
 }
 
-static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
+static IRAM_ATTR void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
 
     counter->frames += 1;
     counter->frames_by_type[frame->type] = counter->frames_by_type[frame->type] + 1;
@@ -126,11 +132,11 @@ static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
                 log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, counter->frames_by_type[i]);
             }
         }
-        //ESP_LOGI(TAG, "%s - %s", counter->name, log);
+        ESP_LOGI(TAG, "%s - %s", counter->name, log);
     }
 }
 
-static void _skymap_handler(crsf_frame_t *frame) {
+static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
     crsf_payload_rc_channels_t c;
     if (crsf_payload_unpack__rc_channels(frame, &c)) {
         // enable skymap based on the engage channel
@@ -155,6 +161,7 @@ static void _skymap_handler(crsf_frame_t *frame) {
         static int64_t last_log_time = 0;
         if (esp_timer_get_time() > last_log_time + 1000000) {
             last_log_time = esp_timer_get_time();
+            /*
             ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
                      c.channels[0], c.channels[1], c.channels[2], c.channels[3],
                      c.channels[4], c.channels[5], c.channels[6], c.channels[7],
@@ -162,6 +169,7 @@ static void _skymap_handler(crsf_frame_t *frame) {
                      c.channels[12], c.channels[13], c.channels[14], c.channels[15]);
             ESP_LOGI(TAG, "channel: %u[%u], roll: %u, pitch: %u",
                      ch_engage, c.channels[ch_engage], roll, pitch);
+            */
         }
     }
 }

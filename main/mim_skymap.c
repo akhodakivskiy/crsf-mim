@@ -37,7 +37,7 @@ static void _skymap_update();
 TaskHandle_t _task_skymap = NULL;
 skymap_ctx_t _skymap_ctx;
 
-void mim_skymap_init() {
+void mim_skymap_init(BaseType_t priority) {
     assert(_task_skymap == NULL);
 
     skymap_init(&_skymap_ctx.skymap);
@@ -56,28 +56,15 @@ void mim_skymap_init() {
     _skymap_ctx.guidance_config.max_roll_deg = mim_settings_get()->guidance.max_roll_deg;
     _skymap_ctx.guidance_config.max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg;
 
-    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, configMAX_PRIORITIES - 3, &_task_skymap, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, priority, &_task_skymap, PRO_CPU_NUM) == pdPASS);
 }
 
 bool mim_skymap_guidance_is_enabled() {
     return _skymap_ctx.guidance_enabled;
 }
 
-void mim_skymap_guidance_enable(bool enable) {
+void IRAM_ATTR mim_skymap_guidance_enable(bool enable) {
     _skymap_ctx.guidance_enabled = enable;
-}
-
-void mim_skymap_get_command(mim_skymap_command_t *command) {
-    xSemaphoreTake(_skymap_ctx.skymap_sem, portMAX_DELAY);
-    command->is_valid = _skymap_ctx.skymap.is_ready_to_engage && (_skymap_ctx.guidance_command.type != NAV_GUIDANCE_NONE);
-    if (_skymap_ctx.guidance_enabled && command->is_valid) {
-        command->roll_cmd = _skymap_ctx.guidance_command.roll_cmd;
-        command->pitch_cmd = _skymap_ctx.guidance_command.pitch_cmd;
-    } else {
-        command->roll_cmd = 0.0;
-        command->pitch_cmd = 0.0;
-    }
-    xSemaphoreGive(_skymap_ctx.skymap_sem);
 }
 
 static void _udp_on_connected(void *user_ctx, ip4_addr_t *addr) {
@@ -98,7 +85,7 @@ static void _udp_on_disconnected(void *user_ctx) {
     xSemaphoreGive(_skymap_ctx.skymap_sem);
 }
 
-static void _udp_on_packet(void *user_ctx, uint8_t *data, uint16_t len, ip4_addr_t *addr_from, uint16_t port_from) {
+static IRAM_ATTR void _udp_on_packet(void *user_ctx, uint8_t *data, uint16_t len, ip4_addr_t *addr_from, uint16_t port_from) {
     skymap_ctx_t *ctx = (skymap_ctx_t*)(user_ctx);
 
     ctx->skymap_addr = *addr_from;
@@ -115,9 +102,10 @@ static void _udp_on_packet(void *user_ctx, uint8_t *data, uint16_t len, ip4_addr
     xSemaphoreGive(_skymap_ctx.skymap_sem);
 }
 
-static void _task_skymap_impl(void *arg) {
+static IRAM_ATTR void _task_skymap_impl(void *arg) {
     libnet_config_t libnet_cfg = {0};
 
+    libnet_cfg.priority = uxTaskPriorityGet(xTaskGetCurrentTaskHandle());
     libnet_cfg.core_id = PRO_CPU_NUM;
     libnet_cfg.callbacks.connected = _udp_on_connected;
     libnet_cfg.callbacks.disconnected = _udp_on_disconnected;
@@ -157,7 +145,7 @@ static void _task_skymap_impl(void *arg) {
     }
 }
 
-static void _skymap_update() {
+static void IRAM_ATTR _skymap_update() {
     if (_skymap_ctx.guidance_enabled && _skymap_ctx.skymap.is_ready_to_engage) {
         skymap_t *sm = &_skymap_ctx.skymap;
 

@@ -9,12 +9,10 @@ typedef struct {
     double pitch_cmd;
 } mim_skymap_command_t;
 
-void mim_skymap_init();
+void mim_skymap_init(BaseType_t priority);
 
 bool mim_skymap_guidance_is_enabled();
 
 void mim_skymap_guidance_enable(bool enable);
-
-void mim_skymap_get_command(mim_skymap_command_t *command);
 
 #endif

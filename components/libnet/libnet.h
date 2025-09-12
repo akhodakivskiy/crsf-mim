@@ -39,6 +39,7 @@ typedef void (*libnet_callback_disconnected_t)(void *user_ctx);
 typedef void (*libnet_callback_packet_t)(void *user_ctx, uint8_t* data, uint16_t len, ip4_addr_t *addr_from, uint16_t port);
 
 typedef struct {
+    BaseType_t priority;
     BaseType_t core_id;
     struct {
         libnet_callback_connected_t connected;

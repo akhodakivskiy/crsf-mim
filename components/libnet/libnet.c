@@ -238,7 +238,7 @@ esp_err_t libnet_udp_server_start(uint16_t port) {
     s_libnet_ctx.udp_server_socket = sock;
     s_libnet_ctx.udp_server_running = true;
 
-    xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, &port, 5, &s_libnet_ctx.udp_server_task, s_libnet_ctx.config.core_id);
+    xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, &port, s_libnet_ctx.config.priority, &s_libnet_ctx.udp_server_task, s_libnet_ctx.config.core_id);
     ESP_LOGI(TAG, "UDP server started on port %d", port);
     return ESP_OK;
 }
@@ -264,7 +264,7 @@ esp_err_t libnet_udp_server_stop(void) {
     return ESP_OK;
 }
 
-esp_err_t libnet_udp_send(const ip4_addr_t *dest_ip, uint16_t dest_port, const uint8_t* data, size_t len) {
+esp_err_t IRAM_ATTR libnet_udp_send(const ip4_addr_t *dest_ip, uint16_t dest_port, const uint8_t* data, size_t len) {
     if (!s_libnet_ctx.connected) {
         ESP_LOGE(TAG, "Network not connected");
         return ESP_ERR_INVALID_STATE;

@@ -26,7 +26,7 @@ static const char *TAG = "CRSF_PAYLOAD";
         *(uint32_t*)(data + __byte_idx) |= (__ch_v << __shift); \
     } while(0)
 
-bool crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload) {
     if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
         (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
 
@@ -55,7 +55,7 @@ bool crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc
     return false;
 }
 
-bool crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
     if ((frame->type == CRSF_FRAME_TYPE_PARAM_READ) &&
         (frame->length == CRSF_PAYLOAD_LENGTH_PARAM_READ) &&
         (frame->is_extended)) {
@@ -71,7 +71,7 @@ bool crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_dev
     return false;
 }
 
-bool crsf_payload_unpack__param_write_header(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__param_write_header(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_PARAM_WRITE) {
 
         payload->dest = frame->data[0];
@@ -85,7 +85,7 @@ bool crsf_payload_unpack__param_write_header(const crsf_frame_t *frame, crsf_pay
     return false;
 }
 
-bool crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload, crsf_device_param_type_t type) {
+bool IRAM_ATTR crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payload_device_param_write_t *payload, crsf_device_param_type_t type) {
     payload->type = type;
 
     const uint8_t *ptr = frame->data + 3;
@@ -138,7 +138,7 @@ bool crsf_payload_unpack__param_write_value(const crsf_frame_t *frame, crsf_payl
     return true;
 }
 
-bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payload_timing_correction_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payload_timing_correction_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_RADIO_ID) {
         uint8_t subtype = frame->data[2];
         if ((subtype == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) && 
@@ -156,7 +156,7 @@ bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payl
     return false;
 }
 
-bool crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_GPS && frame->length == CRSF_PAYLOAD_LENGTH_GPS) {
         payload->latitude = (int32_t)be32toh(*(int32_t *)(frame->data + 0));
         payload->longitude = (int32_t)be32toh(*(int32_t *)(frame->data + 4));
@@ -173,7 +173,7 @@ bool crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *pay
 const float _CRSF_ALT_BARO_K_R = .026;
 const int _CRSF_ALT_BARO_K_L = 100;
 
-bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_BARO_ALTITUDE && frame->length == CRSF_PAYLOAD_LENGTH_BARO_ALTITUDE) {
         ESP_LOG_BUFFER_HEX(TAG, frame->data, 2);
         uint8_t alt_packed_0 = frame->data[0];
@@ -191,7 +191,7 @@ bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_
     return false;
 }
 
-bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload) {
+bool IRAM_ATTR crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_VARIO && frame->length == CRSF_PAYLOAD_LENGTH_VARIO) {
         payload->vspeed_cms = (int16_t)be16toh(*(uint16_t *)frame->data);
         return true;
@@ -200,7 +200,7 @@ bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t 
     return false;
 }
 
-void crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload) {
+void IRAM_ATTR crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload) {
 
     frame->type = CRSF_FRAME_TYPE_RC_CHANNELS_PACKED;
     frame->length = CRSF_PAYLOAD_LENGTH_RC_CHANNELS;
@@ -228,7 +228,7 @@ void crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_c
     frame->data[frame->length - 2] = crsf_calc_crc8(frame);
 }
 
-void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
+void IRAM_ATTR crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
     frame->sync = CRSF_SYNC_BYTE;
     frame->type = CRSF_FRAME_TYPE_DEVICE_INFO;
 
@@ -282,7 +282,7 @@ _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . valu
 _CRSF_PAYLOAD_WRITE_STRING(BUFFER, OFFSET, PAYLOAD -> value . TYPE . units) \
 /* end helper macro definitions */
 
-void crsf_payload_pack__param_entry(crsf_frame_t *frame, 
+void IRAM_ATTR crsf_payload_pack__param_entry(crsf_frame_t *frame, 
                                     const crsf_payload_device_param_entry_t *payload) {
 
     frame->sync = CRSF_SYNC_BYTE;
@@ -372,7 +372,7 @@ void crsf_payload_pack__param_entry(crsf_frame_t *frame,
     frame->data[frame->length - 2] = crsf_calc_crc8(frame);
 }
 
-bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns) {
+bool IRAM_ATTR crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns) {
     if ((frame->type == CRSF_FRAME_TYPE_RADIO_ID) &&
         (frame->data[2] == CRSF_FRAME_SUBTYPE_TIMING_CORRECTION) &&
         (frame->length == CRSF_PAYLOAD_LENGTH_RADIO_ID)) {
@@ -386,7 +386,7 @@ bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interv
     return false;
 }
 
-bool crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int16_t value) {
+bool IRAM_ATTR crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int16_t value) {
     if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
         (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
 

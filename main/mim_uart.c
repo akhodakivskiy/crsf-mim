@@ -65,8 +65,8 @@ static void _timer_set_alarm_period(gptimer_handle_t handle, int32_t offset_us, 
 static void _uart_wdt();
 static uint32_t _autobaud();
 
-void mim_uart_init(uart_port_t port_controller, gpio_num_t pin_controller,
-                    uart_port_t port_module, gpio_num_t pin_module) {
+void mim_uart_init(UBaseType_t priority_controller, uart_port_t port_controller, gpio_num_t pin_controller,
+                   UBaseType_t priority_module, uart_port_t port_module, gpio_num_t pin_module) {
     assert(!_is_init);
 
     _port_controller = port_controller;
@@ -79,9 +79,9 @@ void mim_uart_init(uart_port_t port_controller, gpio_num_t pin_controller,
     _pin_module = pin_module;
     _queue_crsf_module = xQueueCreate(10, sizeof(crsf_frame_t));
 
-    assert(xTaskCreatePinnedToCore(_task_controller_impl, "controller", 4096, NULL, configMAX_PRIORITIES - 2, &_task_controller, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_controller_impl, "task_controller", 4096, NULL, priority_controller, &_task_controller, APP_CPU_NUM) == pdPASS);
 
-    assert(xTaskCreatePinnedToCore(_task_module_impl, "module", 4096, NULL, configMAX_PRIORITIES - 2, &_task_module, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_module_impl, "task_module", 4096, NULL, priority_module, &_task_module, APP_CPU_NUM) == pdPASS);
 
     _is_init = true;
 }
@@ -94,7 +94,7 @@ void mim_uart_set_module_handler(mim_uart_handler handler) {
     _handler_module = handler;
 }
 
-void mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
+void IRAM_ATTR mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
     assert(_is_init);
     assert(xQueueSend(_queue_crsf_module, frame, 0) == pdPASS);
 }
@@ -130,7 +130,7 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
     ESP_ERROR_CHECK(uart_enable_rx_intr(port));
 }
 
-static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
+static IRAM_ATTR void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
     ESP_ERROR_CHECK(uart_flush_input(port));
 
     ESP_ERROR_CHECK(gpio_set_pull_mode(pin, GPIO_FLOATING));
@@ -140,7 +140,7 @@ static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
     esp_rom_gpio_connect_out_signal(pin, UART_PERIPH_SIGNAL(port, SOC_UART_TX_PIN_IDX), true, false);
 }
 
-static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
+static IRAM_ATTR void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT));
     //gpio_matrix_in(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
     esp_rom_gpio_connect_in_signal(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
@@ -150,7 +150,7 @@ static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
     ESP_ERROR_CHECK(uart_flush_input(port));
 }
 
-static bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_t *frame) {
+static IRAM_ATTR bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_t *frame) {
     bool result = false;
     uint8_t buff[256];
 
@@ -183,7 +183,7 @@ static bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_
 }
 
 
-void _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
+void IRAM_ATTR _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
     uint8_t header[3] = { frame->sync, frame->length, frame->type };
     assert(uart_write_bytes(port, header, 3) == 3);
     if (frame->length > 1) {
@@ -193,7 +193,7 @@ void _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
     ESP_ERROR_CHECK(uart_wait_tx_done(port, portMAX_DELAY));
 }
 
-static void _task_controller_impl(void *arg) {
+static void IRAM_ATTR _task_controller_impl(void *arg) {
     _uart_init_port(_port_controller, _pin_controller, &_queue_uart_controller);
 
     _uart_half_duplex_set_rx(_port_controller, _pin_controller);
@@ -241,7 +241,7 @@ static void _task_controller_impl(void *arg) {
     }
 }
 
-static void _task_module_impl(void *arg) {
+static void IRAM_ATTR _task_module_impl(void *arg) {
     SemaphoreHandle_t sem = xSemaphoreCreateBinary();
     // start with highest rate possible in CRSF
     // this will be adjusted with timing correction frames
@@ -283,7 +283,9 @@ static void _task_module_impl(void *arg) {
                             int32_t offset_us = payload.offset_100ns / 10;
                             interval_us = payload.interval_100ns / 10;
                             _timer_set_alarm_period(_timer_module, -offset_us, interval_us);
-                            ESP_LOGI(TAG_MODULE, "timing correction, offset=%li, period=%lu", offset_us, interval_us);
+                            if (abs(offset_us) > 50) {
+                                ESP_LOGI(TAG_MODULE, "timing correction, offset=%li, period=%lu", offset_us, interval_us);
+                            }
                         }
 
                         if (_handler_module != NULL) {
@@ -302,7 +304,7 @@ static void _task_module_impl(void *arg) {
     }
 }
 
-static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx) {
+static bool IRAM_ATTR _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx) {
     BaseType_t pxHigherPriorityTaskWoken;
     xSemaphoreGiveFromISR((SemaphoreHandle_t *)(ctx), &pxHigherPriorityTaskWoken);
     return pxHigherPriorityTaskWoken;
@@ -335,7 +337,7 @@ static void _timer_init(gptimer_handle_t *handle, SemaphoreHandle_t semaphore, u
     *handle = timer;
 }
 
-static void _timer_set_alarm_period(gptimer_handle_t timer, int32_t offset, uint32_t interval_us) {
+static void IRAM_ATTR _timer_set_alarm_period(gptimer_handle_t timer, int32_t offset, uint32_t interval_us) {
     uint64_t count = 0;
     ESP_ERROR_CHECK(gptimer_get_raw_count(timer, &count));
     int64_t count_new = (int64_t)count + offset;
@@ -349,7 +351,7 @@ static void _timer_set_alarm_period(gptimer_handle_t timer, int32_t offset, uint
     ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
 }
 
-static void _uart_wdt() {
+static void IRAM_ATTR _uart_wdt() {
     int64_t time = esp_timer_get_time();
     uint8_t lq = util_lqcalc_get_lq(&_lq);
 
@@ -399,7 +401,7 @@ static void _uart_wdt() {
 
 }
 
-static uint32_t _autobaud() {
+static uint32_t IRAM_ATTR _autobaud() {
     uint32_t result = 0;
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     uart_dev_t *u = UART_LL_GET_HW(_port_controller);

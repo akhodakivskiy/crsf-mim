@@ -42,7 +42,7 @@ void util_lqcalc_reset_100(util_lqcalc_t *lqc) {
     }
 }
 
-void util_lqcalc_prepare(util_lqcalc_t *lqc) {
+void IRAM_ATTR util_lqcalc_prepare(util_lqcalc_t *lqc) {
     // advance current index and mask by 1
     lqc->current_bit_mask = lqc->current_bit_mask << 1;
     if (lqc->current_bit_mask == 0) {
