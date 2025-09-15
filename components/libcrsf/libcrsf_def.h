@@ -13,6 +13,7 @@
 #define CRSF_RC_CHANNELS_TICKS_TO_US(x) ((x - 992) * 5 / 8 + 1500)
 #define CRSF_RC_CHANNELS_US_TO_TICKS(x) ((x - 1500) * 8 / 5 + 992)
 
+#define CRSF_NUM_CHANNELS 16
 #define CRSF_MIN_FRAME_LEN 4 // sync+type+len+crc
 #define CRSF_MAX_FRAME_LEN 64 // sync+type+len+[payload]+crc
 #define CRSF_MAX_PAYLOAD_LEN (CRSF_MAX_FRAME_LEN - 4)

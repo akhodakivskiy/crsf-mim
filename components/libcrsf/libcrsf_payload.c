@@ -11,48 +11,68 @@
 
 static const char *TAG = "CRSF_PAYLOAD";
 
-#define UNPACK_CHANNEL(ch_idx, bit_pos) \
-    do { \
-        uint32_t __byte_idx = (bit_pos) >> 3; \
-        uint32_t __shift = (bit_pos) & 7; \
-        payload->channels[ch_idx] = ((*(uint32_t*)(data + __byte_idx)) >> __shift) & 0x07FF; \
-    } while(0)
-
-#define PACK_CHANNEL(ch_idx, v, bit_pos) \
-    do { \
-        uint32_t __byte_idx = (bit_pos) >> 3; \
-        uint32_t __shift = (bit_pos) & 7; \
-        uint32_t __ch_v = v & 0x07FF; \
-        *(uint32_t*)(data + __byte_idx) |= (__ch_v << __shift); \
-    } while(0)
-
-bool IRAM_ATTR crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload) {
-    if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
-        (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
-
-        const uint8_t *data = frame->data;
-
-        UNPACK_CHANNEL(0,  0);
-        UNPACK_CHANNEL(1,  11);
-        UNPACK_CHANNEL(2,  22);
-        UNPACK_CHANNEL(3,  33);
-        UNPACK_CHANNEL(4,  44);
-        UNPACK_CHANNEL(5,  55);
-        UNPACK_CHANNEL(6,  66);
-        UNPACK_CHANNEL(7,  77);
-        UNPACK_CHANNEL(8,  88);
-        UNPACK_CHANNEL(9,  99);
-        UNPACK_CHANNEL(10, 110);
-        UNPACK_CHANNEL(11, 121);
-        UNPACK_CHANNEL(12, 132);
-        UNPACK_CHANNEL(13, 143);
-        UNPACK_CHANNEL(14, 154);
-        UNPACK_CHANNEL(15, 165);
-
-        return true;
+bool IRAM_ATTR crsf_payload__rc_channels_unpack(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload) {
+    if ((frame->type != CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
+        (frame->length != CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
+        return false;
     }
 
-    return false;
+    memcpy(payload, frame->data, sizeof(crsf_payload_rc_channels_t));
+
+    return true;
+}
+
+void IRAM_ATTR crsf_payload__rc_channels_pack(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload) {
+    frame->is_extended = false;
+    frame->type = CRSF_FRAME_TYPE_RC_CHANNELS_PACKED;
+    frame->length = CRSF_PAYLOAD_LENGTH_RC_CHANNELS;
+
+    memcpy(frame->data, payload, sizeof(crsf_payload_rc_channels_t));
+
+    frame->data[frame->length - 2] = crsf_calc_crc8(frame);
+}
+
+uint16_t IRAM_ATTR crsf_payload__rc_channels_get(const crsf_payload_rc_channels_t *payload, uint8_t channel) {
+    switch (channel) {
+        case 1: return payload->ch1;
+        case 2: return payload->ch2;
+        case 3: return payload->ch3;
+        case 4: return payload->ch4;
+        case 5: return payload->ch5;
+        case 6: return payload->ch6;
+        case 7: return payload->ch7;
+        case 8: return payload->ch8;
+        case 9: return payload->ch9;
+        case 10: return payload->ch10;
+        case 11: return payload->ch11;
+        case 12: return payload->ch12;
+        case 13: return payload->ch13;
+        case 14: return payload->ch14;
+        case 15: return payload->ch15;
+        case 16: return payload->ch16;
+        default: assert(false);
+    }
+}
+void IRAM_ATTR crsf_payload__rc_channels_set(crsf_payload_rc_channels_t *payload, uint8_t channel, uint16_t value) {
+    switch (channel) {
+        case 1: payload->ch1 = value; return;
+        case 2: payload->ch2 = value; return;
+        case 3: payload->ch3 = value; return;
+        case 4: payload->ch4 = value; return;
+        case 5: payload->ch5 = value; return;
+        case 6: payload->ch6 = value; return;
+        case 7: payload->ch7 = value; return;
+        case 8: payload->ch8 = value; return;
+        case 9: payload->ch9 = value; return;
+        case 10: payload->ch10 = value; return;
+        case 11: payload->ch11 = value; return;
+        case 12: payload->ch12 = value; return;
+        case 13: payload->ch13 = value; return;
+        case 14: payload->ch14 = value; return;
+        case 15: payload->ch15 = value; return;
+        case 16: payload->ch16 = value; return;
+        default: assert(false);
+    }
 }
 
 bool IRAM_ATTR crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload) {
@@ -200,40 +220,12 @@ bool IRAM_ATTR crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payloa
     return false;
 }
 
-void IRAM_ATTR crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload) {
-
-    frame->type = CRSF_FRAME_TYPE_RC_CHANNELS_PACKED;
-    frame->length = CRSF_PAYLOAD_LENGTH_RC_CHANNELS;
-
-    uint8_t *data = frame->data;
-    memset(data, 0, 22);
-
-    PACK_CHANNEL(0, payload->channels[0], 0);
-    PACK_CHANNEL(1, payload->channels[1], 11);
-    PACK_CHANNEL(2, payload->channels[2], 22);
-    PACK_CHANNEL(3, payload->channels[3],  33);
-    PACK_CHANNEL(4, payload->channels[4],  44);
-    PACK_CHANNEL(5, payload->channels[5],  55);
-    PACK_CHANNEL(6, payload->channels[6],  66);
-    PACK_CHANNEL(7, payload->channels[7],  77);
-    PACK_CHANNEL(8, payload->channels[8],  88);
-    PACK_CHANNEL(9, payload->channels[9],  99);
-    PACK_CHANNEL(10, payload->channels[10], 110);
-    PACK_CHANNEL(11, payload->channels[11], 121);
-    PACK_CHANNEL(12, payload->channels[12], 132);
-    PACK_CHANNEL(13, payload->channels[13], 143);
-    PACK_CHANNEL(14, payload->channels[14], 154);
-    PACK_CHANNEL(15, payload->channels[15], 165);
-
-    frame->data[frame->length - 2] = crsf_calc_crc8(frame);
-}
-
 void IRAM_ATTR crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
     frame->sync = CRSF_SYNC_BYTE;
     frame->type = CRSF_FRAME_TYPE_DEVICE_INFO;
+    frame->is_extended = true;
 
     uint8_t i = 0;
-    frame->is_extended = true;
     frame->dest = (frame->data[i++] = payload->dest);
     frame->source = (frame->data[i++] = payload->source);
 
@@ -287,6 +279,7 @@ void IRAM_ATTR crsf_payload_pack__param_entry(crsf_frame_t *frame,
 
     frame->sync = CRSF_SYNC_BYTE;
     frame->type = CRSF_FRAME_TYPE_PARAM_ENTRY;
+    frame->is_extended = true;
 
     uint8_t i = 0;
     frame->data[i++] = payload->dest;
@@ -383,18 +376,5 @@ bool IRAM_ATTR crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint3
 
         return true;
     }
-    return false;
-}
-
-bool IRAM_ATTR crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int16_t value) {
-    if ((frame->type == CRSF_FRAME_TYPE_RC_CHANNELS_PACKED) &&
-        (frame->length == CRSF_PAYLOAD_LENGTH_RC_CHANNELS)) {
-
-        uint8_t *data = frame->data;
-        PACK_CHANNEL(channel - 1, value, channel * 11);
-
-        return true;
-    }
-
     return false;
 }

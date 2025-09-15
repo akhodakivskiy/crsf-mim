@@ -32,10 +32,9 @@ static const char *TAG_CONTROLLER = "MAIN_TX_CONTROLLER";
 static const char *TAG_MODULE = "MAIN_TX_MODULE";
 static const char *TAG_SKYMAP = "MAIN_TX_SKYMAP";
 
-#define PRIORITY_TASK_ASYNC_LOGGING (configMAX_PRIORITIES - 5)
-#define PRIORITY_TASK_SKYMAP (configMAX_PRIORITIES - 3)
-#define PRIORITY_TASK_CONTROLLER (configMAX_PRIORITIES - 2)
-#define PRIORITY_TASK_MODULE (configMAX_PRIORITIES - 1)
+#define PRIORITY_TASK_ASYNC_LOGGING (configMAX_PRIORITIES - 3)
+#define PRIORITY_TASK_SKYMAP (configMAX_PRIORITIES - 2)
+#define PRIORITY_TASK_CRSF (configMAX_PRIORITIES - 1)
 
 #define UART_PORT_CONTROLLER UART_NUM_1
 #define UART_PORT_MODULE UART_NUM_2
@@ -72,8 +71,10 @@ void app_main(void) {
     mim_settings_load();
 
     // init UART tasks and set frame handler
-    mim_uart_init(PRIORITY_TASK_CONTROLLER, UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, 
-                  PRIORITY_TASK_MODULE, UART_PORT_MODULE, UART_PIN_MODULE);
+    mim_uart_init(PRIORITY_TASK_CRSF, 
+                  UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, 
+                  UART_PORT_MODULE, UART_PIN_MODULE);
+
     mim_uart_set_controller_handler(_frame_handler_controller);
     mim_uart_set_module_handler(_frame_handler_module);
 
@@ -132,44 +133,35 @@ static IRAM_ATTR void _count_frames(const crsf_frame_t *frame, frame_counter_t *
                 log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, counter->frames_by_type[i]);
             }
         }
-        ESP_LOGI(TAG, "%s - %s", counter->name, log);
+        //ESP_LOGI(TAG, "%s - %s", counter->name, log);
     }
 }
 
 static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
-    crsf_payload_rc_channels_t c;
-    if (crsf_payload_unpack__rc_channels(frame, &c)) {
+    crsf_payload_rc_channels_t rc;
+    if (crsf_payload__rc_channels_unpack(frame, &rc)) {
         // enable skymap based on the engage channel
-        uint8_t ch_engage = mim_settings_get()->engage_channel - 1;
-        if (ch_engage >= 0 && ch_engage < 16) {
-            bool guidance_enabled = c.channels[ch_engage] > CRSF_RC_CHANNELS_CENTER;
-            mim_skymap_guidance_enable(guidance_enabled);
-        } else if (mim_skymap_guidance_is_enabled()) {
-            mim_skymap_guidance_enable(false);
-            mim_rc_clear_overrides();
-        }
+        uint8_t engage_channel = mim_settings_get()->engage_channel;
+        uint16_t engage_value = crsf_payload__rc_channels_get(&rc, engage_channel);
+        mim_skymap_guidance_enable(engage_value > CRSF_RC_CHANNELS_CENTER);
 
         // override channels
-        uint16_t roll = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, c.channels[MIM_RC_CHANNEL_ROLL - 1]);
-        uint16_t pitch = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, c.channels[MIM_RC_CHANNEL_PITCH - 1]);
+        uint16_t roll = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_ROLL));
+        uint16_t pitch = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_PITCH));
 
-        c.channels[MIM_RC_CHANNEL_ROLL] = roll;
-        c.channels[MIM_RC_CHANNEL_PITCH] = pitch;
+        crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_ROLL, roll);
+        crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_PITCH, pitch);
 
-        crsf_payload_pack__rc_channels(frame, &c);
+        crsf_payload__rc_channels_pack(frame, &rc);
 
         static int64_t last_log_time = 0;
         if (esp_timer_get_time() > last_log_time + 1000000) {
             last_log_time = esp_timer_get_time();
-            /*
             ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
-                     c.channels[0], c.channels[1], c.channels[2], c.channels[3],
-                     c.channels[4], c.channels[5], c.channels[6], c.channels[7],
-                     c.channels[8], c.channels[9], c.channels[10], c.channels[11],
-                     c.channels[12], c.channels[13], c.channels[14], c.channels[15]);
-            ESP_LOGI(TAG, "channel: %u[%u], roll: %u, pitch: %u",
-                     ch_engage, c.channels[ch_engage], roll, pitch);
-            */
+                     rc.ch1, rc.ch2,  rc.ch3,  rc.ch4,  rc.ch5,  rc.ch6,  rc.ch7,  rc.ch8, 
+                     rc.ch9, rc.ch10, rc.ch11, rc.ch12, rc.ch13, rc.ch14, rc.ch15, rc.ch16);
+            ESP_LOGI(TAG, "engage[channel=%u, value=%u], roll: %u, pitch: %u",
+                     engage_channel, engage_value, roll, pitch);
         }
     }
 }

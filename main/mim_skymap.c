@@ -24,8 +24,6 @@ typedef struct {
     SemaphoreHandle_t skymap_sem;
 
     bool guidance_enabled;
-    nav_guidance_t guidance_config;
-    nav_guidance_command_t guidance_command;
 } skymap_ctx_t;
 
 static void _udp_on_connected(void *user_ctx, ip4_addr_t *addr);
@@ -49,14 +47,9 @@ void mim_skymap_init(BaseType_t priority) {
     _skymap_ctx.skymap_port = 0;
     ip4_addr_set_any(&_skymap_ctx.skymap_addr);
 
-    memset(&_skymap_ctx.guidance_command, 0, sizeof(nav_guidance_command_t));
-
     _skymap_ctx.guidance_enabled = false;
-    _skymap_ctx.guidance_config.N = mim_settings_get()->guidance.N;
-    _skymap_ctx.guidance_config.max_roll_deg = mim_settings_get()->guidance.max_roll_deg;
-    _skymap_ctx.guidance_config.max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg;
 
-    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, priority, &_task_skymap, PRO_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, NULL, priority, &_task_skymap, APP_CPU_NUM) == pdPASS);
 }
 
 bool mim_skymap_guidance_is_enabled() {
@@ -167,18 +160,30 @@ static void IRAM_ATTR _skymap_update() {
             .vel_up = sm->target.velocity.up_ms
         };
 
+        nav_guidance_t nav_config = {
+            .N = mim_settings_get()->guidance.N,
+            .max_roll_deg = mim_settings_get()->guidance.max_roll_deg,
+            .max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg
+        };
+
+        nav_guidance_command_t command;
+
         nav_guidance_compute_command(
-            &_skymap_ctx.guidance_config,
+            &nav_config,
             &state_interceptor,
             &state_target,
-            &_skymap_ctx.guidance_command
+            &command
         );
 
-        if (_skymap_ctx.guidance_command.type == NAV_GUIDANCE_NONE) {
+        ESP_LOGI(TAG, "accel lat=%f, ver=%f, roll=%f, pitch=%f", 
+                 command.accel_lateral, command.accel_vertical,
+                 command.roll_deg, command.pitch_deg);
+
+        if (command.type == NAV_GUIDANCE_NONE) {
             mim_rc_clear_overrides();
         } else {
-            mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, _skymap_ctx.guidance_command.roll_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
-            mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, _skymap_ctx.guidance_command.pitch_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+            mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, command.roll_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+            mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, command.pitch_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
         }
     }
 }

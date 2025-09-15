@@ -126,7 +126,7 @@ void _param_folder_guidance_get(crsf_device_param_read_value_t *value) {
 
 void _param_float_guidance_N_get(crsf_device_param_read_value_t *value) {
     value->flt.value = mim_settings_get()->guidance.N * 10;
-    value->flt.value_min = 20;
+    value->flt.value_min = 10;
     value->flt.value_max = 100;
     value->flt.decimal_places = 1;
     value->flt.step = 1;

@@ -3,9 +3,6 @@ import math
 from enum import Enum
 from dataclasses import dataclass
 
-from tracker import AccelTracker
-
-
 class ProNavType(Enum):
     NONE = "NONE"
     PURSUIT = "PURSUIT"
@@ -45,7 +42,6 @@ class ProportionalNavigation:
         self.deg_to_rad = math.pi / 180.0
         self.max_pitch_rad = np.radians(max_pitch_deg)
         self.max_roll_rad = np.radians(max_roll_deg)
-        self.tracker = AccelTracker()
 
     def lat_lon_to_ned(self, state_ref, state):
         """Convert lat/lon/alt to North-East-Down coordinates relative to reference point"""
@@ -152,11 +148,6 @@ class ProportionalNavigation:
                           tg_state.vel_down])
 
         nav_type, accel = self.compute_guidance_accel(range, vel_i, vel_t)
-
-        if nav_type == ProNavType.TPN:
-            metric = self.tracker.update(vel_i, accel, ic_state.timestamp)
-            if metric is not None:
-                print(f"accel error: {metric.error_instant}")
 
         vel_horizontal = np.array([vel_i[0], vel_i[1], 0])
         down_unit = np.array([0, 0, 1])

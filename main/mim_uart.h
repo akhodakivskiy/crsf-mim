@@ -16,8 +16,9 @@ extern "C" {
 
 typedef void (*mim_uart_handler)(crsf_frame_t *frame);
 
-void mim_uart_init(UBaseType_t priority_controller, uart_port_t port_controller, gpio_num_t pin_controller,
-		   UBaseType_t priority_module, uart_port_t port_module, gpio_num_t pin_module);
+void mim_uart_init(UBaseType_t priority, 
+		   uart_port_t port_controller, gpio_num_t pin_controller,
+		   uart_port_t port_module, gpio_num_t pin_module);
 
 void mim_uart_set_controller_handler(mim_uart_handler handler);
 void mim_uart_set_module_handler(mim_uart_handler handler);

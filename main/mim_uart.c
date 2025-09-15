@@ -1,28 +1,21 @@
 #include "mim_uart.h"
 
-#include "driver/gptimer_types.h"
-#include "driver/uart.h"
-#include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
-#include "hal/uart_types.h"
+#include <freertos/FreeRTOS.h>
+#include <driver/uart.h>
+#include <hal/uart_ll.h>
+#include <soc/uart_periph.h>
+#include <esp_intr_alloc.h>
+#include <esp_log.h>
+#include <esp_timer.h>
+
 #include "libcrsf.h"
 #include "libcrsf_def.h"
 #include "libcrsf_def.h"
 #include "libcrsf_payload.h"
-#include "portmacro.h"
-#include "soc/gpio_num.h"
 #include "util.h"
 #include "util_lqcalc.h"
 
-#include <hal/uart_ll.h>
-#include <soc/uart_periph.h>
-#include <esp_log.h>
-#include <esp_timer.h>
-#include <driver/gptimer.h>
-
 static const char *TAG= "MIM_UART";
-static const char *TAG_CONTROLLER = "MIM_UART_CONTROLLER";
-static const char *TAG_MODULE = "MIM_UART_MODULE";
 
 #define MIM_UART_WDT_TIMEOUT 1000000 // 1 second
 #define MIM_UART_AUTOBAUD_TIMEOUT 500000 // 500 milliseconds
@@ -33,19 +26,15 @@ bool _is_init = false;
 
 gpio_num_t _pin_controller = GPIO_NUM_NC;
 uart_port_t _port_controller = UART_NUM_MAX;
-QueueHandle_t _queue_uart_controller = NULL;
 QueueHandle_t _queue_crsf_controller = NULL;
-TaskHandle_t _task_controller = NULL;
-
-mim_uart_handler _handler_controller = NULL;
-mim_uart_handler _handler_module = NULL;
+mim_uart_handler _handler_controller_frame = NULL;
 
 gpio_num_t _pin_module = GPIO_NUM_NC;
 uart_port_t _port_module = UART_NUM_MAX;
-QueueHandle_t _queue_uart_module = NULL;
 QueueHandle_t _queue_crsf_module = NULL;
-TaskHandle_t _task_module = NULL;
-gptimer_handle_t _timer_module;
+mim_uart_handler _handler_module_frame = NULL;
+
+TaskHandle_t _task_crsf = NULL;
 
 util_lqcalc_t _lq = {0};
 int64_t _last_uart_wdt_time = 0;
@@ -55,18 +44,15 @@ uint8_t _autobaud_current_idx = 0;
 static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue);
 static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin);
 static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin);
-static bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_t *frame);
+static bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *frame);
 static void _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
-static void _task_controller_impl(void *arg);
-static void _task_module_impl(void *arg);
-static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx);
-static void _timer_init(gptimer_handle_t *handle, SemaphoreHandle_t semaphore, uint32_t period_us);
-static void _timer_set_alarm_period(gptimer_handle_t handle, int32_t offset_us, uint32_t interval_us);
+static void _task_crsf_impl(void *arg);
 static void _uart_wdt();
 static uint32_t _autobaud();
 
-void mim_uart_init(UBaseType_t priority_controller, uart_port_t port_controller, gpio_num_t pin_controller,
-                   UBaseType_t priority_module, uart_port_t port_module, gpio_num_t pin_module) {
+void mim_uart_init(UBaseType_t priority, 
+                   uart_port_t port_controller, gpio_num_t pin_controller,
+                   uart_port_t port_module, gpio_num_t pin_module) {
     assert(!_is_init);
 
     _port_controller = port_controller;
@@ -79,19 +65,17 @@ void mim_uart_init(UBaseType_t priority_controller, uart_port_t port_controller,
     _pin_module = pin_module;
     _queue_crsf_module = xQueueCreate(10, sizeof(crsf_frame_t));
 
-    assert(xTaskCreatePinnedToCore(_task_controller_impl, "task_controller", 4096, NULL, priority_controller, &_task_controller, APP_CPU_NUM) == pdPASS);
-
-    assert(xTaskCreatePinnedToCore(_task_module_impl, "task_module", 4096, NULL, priority_module, &_task_module, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_crsf_impl, "task_crsf", 4096, NULL, priority, &_task_crsf, APP_CPU_NUM) == pdPASS);
 
     _is_init = true;
 }
 
 void mim_uart_set_controller_handler(mim_uart_handler handler) {
-    _handler_controller = handler;
+    _handler_controller_frame = handler;
 }
 
 void mim_uart_set_module_handler(mim_uart_handler handler) {
-    _handler_module = handler;
+    _handler_module_frame = handler;
 }
 
 void IRAM_ATTR mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
@@ -114,25 +98,27 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
         },
     };
 
-    uint32_t uart_intr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_OVF | UART_INTR_RXFIFO_TOUT;
-
-    uart_intr_config_t intr_cfg = {
-        .intr_enable_mask = uart_intr_mask,
-        .rx_timeout_thresh = 1,
-        .txfifo_empty_intr_thresh = 0,
-        .rxfifo_full_thresh = 64,
-    };
-
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(port, pin, pin, -1, -1));
     ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 10, queue, ESP_INTR_FLAG_LEVEL3));
-    ESP_ERROR_CHECK(uart_intr_config(port, &intr_cfg));
-    ESP_ERROR_CHECK(uart_enable_rx_intr(port));
+
+    if (queue != NULL) {
+        uint32_t uart_intr_mask = 
+            UART_INTR_RXFIFO_FULL | 
+            UART_INTR_RXFIFO_TOUT;
+
+        uart_intr_config_t intr_cfg = {
+            .intr_enable_mask = uart_intr_mask,
+            .rx_timeout_thresh = 1,
+            .txfifo_empty_intr_thresh = 0,
+            .rxfifo_full_thresh = CRSF_MAX_FRAME_LEN,
+        };
+        ESP_ERROR_CHECK(uart_intr_config(port, &intr_cfg));
+        ESP_ERROR_CHECK(uart_enable_rx_intr(port));
+    }
 }
 
 static IRAM_ATTR void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
-    ESP_ERROR_CHECK(uart_flush_input(port));
-
     ESP_ERROR_CHECK(gpio_set_pull_mode(pin, GPIO_FLOATING));
     ESP_ERROR_CHECK(gpio_set_level(pin, 0));
     ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_OUTPUT));
@@ -150,11 +136,13 @@ static IRAM_ATTR void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin)
     ESP_ERROR_CHECK(uart_flush_input(port));
 }
 
-static IRAM_ATTR bool _uart_read_crsf_frame(const char *tag, uart_port_t port, crsf_frame_t *frame) {
+static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *frame) {
     bool result = false;
     uint8_t buff[256];
 
     size_t len_buffer = 0;
+
+    frame->type = CRSF_FRAME_TYPE_NONE;
 
     ESP_ERROR_CHECK(uart_get_buffered_data_len(port, &len_buffer));
     if (len_buffer > 0) {
@@ -170,8 +158,8 @@ static IRAM_ATTR bool _uart_read_crsf_frame(const char *tag, uart_port_t port, c
                 result = true;
                 break;
             } else if (err != CRSF_PARSE_RESULT_NEED_MORE_DATA) {
-                ESP_LOG_BUFFER_HEX(tag, (uint8_t *)buff, len_read);
-                ESP_LOGE(tag, "crsf [parser error=%u, state=%u], [buffer len=%u, read=%u]", err, p.state, len_buffer, len_read);
+                ESP_LOG_BUFFER_HEX(TAG, (uint8_t *)buff, len_read);
+                ESP_LOGE(TAG, "crsf port=%u [parser error=%u, state=%u], [buffer len=%u, read=%u]", port, err, p.state, len_buffer, len_read);
             }
         }
     }
@@ -190,165 +178,99 @@ void IRAM_ATTR _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
         int size_written = uart_write_bytes(port, frame->data, frame->length - 1);
         assert(size_written == (frame->length - 1));
     }
-    ESP_ERROR_CHECK(uart_wait_tx_done(port, portMAX_DELAY));
 }
 
-static void IRAM_ATTR _task_controller_impl(void *arg) {
-    _uart_init_port(_port_controller, _pin_controller, &_queue_uart_controller);
+static void IRAM_ATTR _task_crsf_impl(void *arg) {
+    ESP_LOGI(TAG, "crsf task started");
 
-    _uart_half_duplex_set_rx(_port_controller, _pin_controller);
+    QueueHandle_t queue_uart_controller;
+
+    _uart_init_port(_port_controller, _pin_controller, &queue_uart_controller);
+    _uart_init_port(_port_module, _pin_module, NULL);
 
     util_lqcalc_init(&_lq, 100);
     util_lqcalc_reset_100(&_lq);
 
-    bool is_frame_ready = false;
-    crsf_frame_t frame;
+    crsf_frame_t frame_from_controller;
+    crsf_frame_t frame_from_module;
+    crsf_frame_t frame_to_controller;
+    crsf_frame_t frame_to_module;
     uart_event_t event;
 
-    ESP_LOGI(TAG_CONTROLLER, "controller task started");
+    bool module_tx_pending = false;
+    bool controller_tx_pending = false;
+    bool has_frame_from_module = false;
+    bool has_frame_from_controller = false;
+
+    _uart_half_duplex_set_rx(_port_controller, _pin_controller);
+    _uart_half_duplex_set_rx(_port_module, _pin_module);
 
     while (true) {
         _uart_wdt();
 
-        util_lqcalc_prepare(&_lq);
-
-        if (xQueueReceive(_queue_uart_controller, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
+        if (xQueueReceive(queue_uart_controller, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
+            util_lqcalc_prepare(&_lq);
             if (event.type == UART_DATA) {
-                is_frame_ready = _uart_read_crsf_frame(TAG_CONTROLLER, _port_controller, &frame);
 
-                if (is_frame_ready) {
+                // Forward (N) request to the module
+                if (xQueueReceive(_queue_crsf_controller, &frame_to_module, 0)) {
+                    _uart_half_duplex_set_tx(_port_module, _pin_module);
+                    _uart_write_crsf_frame(_port_module, &frame_to_module);
+                    module_tx_pending = true;
+                }
+
+                // receive previous module frame (N-1)
+                has_frame_from_module = _uart_read_crsf_frame(_port_module, &frame_from_module);
+
+                // Send (N-1) response to the controller
+                if (xQueueReceive(_queue_crsf_module, &frame_to_controller, 0)) {
+                    _uart_half_duplex_set_tx(_port_controller, _pin_controller);
+                    _uart_write_crsf_frame(_port_controller, &frame_to_controller);
+                    controller_tx_pending = true;
+                }
+
+                // receive current frame from controller (N)
+                has_frame_from_controller = _uart_read_crsf_frame(_port_controller, &frame_from_controller);
+
+                if (module_tx_pending) {
+                    // Wait for TX done on module
+                    ESP_ERROR_CHECK(uart_wait_tx_done(_port_module, portMAX_DELAY));
+                    _uart_half_duplex_set_rx(_port_module, _pin_module);
+                    module_tx_pending = false;
+                }
+
+                // Wait for TX done on controller
+                if (controller_tx_pending) {
+                    ESP_ERROR_CHECK(uart_wait_tx_done(_port_controller, portMAX_DELAY));
+                    _uart_half_duplex_set_rx(_port_controller, _pin_controller);
+                    controller_tx_pending = false;
+                }
+
+                if (has_frame_from_controller) {
                     util_lqcalc_receive(&_lq);
 
-                    if (_handler_controller != NULL) {
-                        _handler_controller(&frame);
+                    if (_handler_controller_frame != NULL) {
+                        _handler_controller_frame(&frame_from_controller);
                     }
 
-                    assert(xQueueOverwrite(_queue_crsf_controller, &frame) == pdTRUE);
+                    assert(xQueueOverwrite(_queue_crsf_controller, &frame_from_controller) == pdTRUE);
 
-                    if (xQueueReceive(_queue_crsf_module, &frame, 0) == pdTRUE) {
-                        _uart_half_duplex_set_tx(_port_controller, _pin_controller);
-                        _uart_write_crsf_frame(_port_controller, &frame);
-                        _uart_half_duplex_set_rx(_port_controller, _pin_controller);
-                        xQueueReset(_queue_uart_controller);
+                    has_frame_from_controller = false;
+                }
+
+                if (has_frame_from_module) {
+                    if (_handler_module_frame != NULL) {
+                        _handler_module_frame(&frame_from_module);
                     }
-                } else {
-                    //ESP_LOGE(TAG_CONTROLLER, "failed to parse controller frame");
+                    assert(xQueueSend(_queue_crsf_module, &frame_from_module, 0) == pdTRUE);
+
+                    has_frame_from_module = false;
                 }
             } else {
-                //ESP_LOGE(TAG_CONTROLLER, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller, event.size, event.timeout_flag);
+                //ESP_LOGE(TAG, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller, event.size, event.timeout_flag);
             }
         }
     }
-}
-
-static void IRAM_ATTR _task_module_impl(void *arg) {
-    SemaphoreHandle_t sem = xSemaphoreCreateBinary();
-    // start with highest rate possible in CRSF
-    // this will be adjusted with timing correction frames
-    _timer_init(&_timer_module, sem, 1000000 / 500); 
-    xSemaphoreGive(sem);
-
-    _uart_init_port(_port_module, _pin_module, &_queue_uart_module);
-
-    _uart_half_duplex_set_tx(_port_module, _pin_module);
-
-    bool is_frame_ready = false;
-    crsf_frame_t frame;
-    uart_event_t event;
-
-    uint32_t interval_us = (1000 / 250) * 1000; // default rate for 400k baud is 250HZ
-
-    ESP_LOGI(TAG, "module task started");
-
-    while (true) {
-        xSemaphoreTake(sem, portMAX_DELAY);
-        if (xQueueReceive(_queue_crsf_controller, &frame, 0) == pdTRUE) {
-            int64_t time_start = esp_timer_get_time();
-            _uart_write_crsf_frame(_port_module, &frame);
-
-            _uart_half_duplex_set_rx(_port_module, _pin_module);
-            xQueueReset(_queue_uart_module);
-
-            int64_t time_rx = esp_timer_get_time();
-            int64_t period_remaining_ms = (interval_us - (time_rx - time_start)) / 1000 - 1;
-
-            if (xQueueReceive(_queue_uart_module, &event, pdMS_TO_TICKS(period_remaining_ms > 0 ? period_remaining_ms : 1)) == pdTRUE) {
-                if (event.type == UART_DATA) {
-                    is_frame_ready = _uart_read_crsf_frame(TAG_MODULE, _port_module, &frame);
-
-                    if (is_frame_ready) {
-                        crsf_payload_timing_correction_t payload;
-                        if ((frame.type == CRSF_FRAME_TYPE_RADIO_ID) &&
-                            (crsf_payload_unpack__timing_correction(&frame, &payload))) {
-                            int32_t offset_us = payload.offset_100ns / 10;
-                            interval_us = payload.interval_100ns / 10;
-                            _timer_set_alarm_period(_timer_module, -offset_us, interval_us);
-                            if (abs(offset_us) > 50) {
-                                ESP_LOGI(TAG_MODULE, "timing correction, offset=%li, period=%lu", offset_us, interval_us);
-                            }
-                        }
-
-                        if (_handler_module != NULL) {
-                            _handler_module(&frame);
-                        }
-
-                        assert(xQueueSend(_queue_crsf_module, &frame, 0) == pdTRUE);
-                    }
-                } else {
-                    //ESP_LOGI(TAG_MODULE, "unhandled uart event=%u", event.type);
-                }
-            }
-
-            _uart_half_duplex_set_tx(_port_module, _pin_module);
-        }
-    }
-}
-
-static bool IRAM_ATTR _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *ctx) {
-    BaseType_t pxHigherPriorityTaskWoken;
-    xSemaphoreGiveFromISR((SemaphoreHandle_t *)(ctx), &pxHigherPriorityTaskWoken);
-    return pxHigherPriorityTaskWoken;
-}
-
-static void _timer_init(gptimer_handle_t *handle, SemaphoreHandle_t semaphore, uint32_t period_us) {
-    gptimer_handle_t timer = NULL;
-    gptimer_config_t timer_config = {
-        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-        .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = 1 * 1000 * 1000,
-    };
-    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &timer));
-
-    gptimer_alarm_config_t alarm_config = {
-        .reload_count = 0,
-        .alarm_count = period_us,
-        .flags.auto_reload_on_alarm = true,
-    };
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
-
-    gptimer_event_callbacks_t cbs = {
-        .on_alarm = _timer_isr,
-    };
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(timer, &cbs, semaphore));
-
-    ESP_ERROR_CHECK(gptimer_enable(timer));
-    ESP_ERROR_CHECK(gptimer_start(timer));
-
-    *handle = timer;
-}
-
-static void IRAM_ATTR _timer_set_alarm_period(gptimer_handle_t timer, int32_t offset, uint32_t interval_us) {
-    uint64_t count = 0;
-    ESP_ERROR_CHECK(gptimer_get_raw_count(timer, &count));
-    int64_t count_new = (int64_t)count + offset;
-    ESP_ERROR_CHECK(gptimer_set_raw_count(timer, count_new >= 0 ? count_new : 0));
-
-    gptimer_alarm_config_t alarm_config = {
-        .reload_count = 0,
-        .alarm_count = interval_us,
-        .flags.auto_reload_on_alarm = true,
-    };
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_config));
 }
 
 static void IRAM_ATTR _uart_wdt() {
@@ -385,10 +307,7 @@ static void IRAM_ATTR _uart_wdt() {
             uart_set_baudrate(_port_module, baud);
             _uart_half_duplex_set_rx(_port_module, _pin_module);
 
-            _timer_set_alarm_period(_timer_module, 0, 1000000 / best_packet_rate);
-
             util_lqcalc_reset_100(&_lq);
-
         }
 
         // no autobaud pending

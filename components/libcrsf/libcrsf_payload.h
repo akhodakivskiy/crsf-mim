@@ -10,6 +10,8 @@
 extern "C" {
 #endif
 
+#define PACKED __attribute__((packed))
+
 typedef enum : uint8_t {
     CRSF_PAYLOAD_LENGTH_DEVICE_PING = 4,
     CRSF_PAYLOAD_LENGTH_PARAM_READ = 6,
@@ -21,8 +23,23 @@ typedef enum : uint8_t {
 } crsf_payload_length_t;
 
 typedef struct {
-    int16_t channels[16];
-} crsf_payload_rc_channels_t;
+    unsigned ch1 : 11;
+    unsigned ch2 : 11;
+    unsigned ch3 : 11;
+    unsigned ch4 : 11;
+    unsigned ch5 : 11;
+    unsigned ch6 : 11;
+    unsigned ch7 : 11;
+    unsigned ch8 : 11;
+    unsigned ch9 : 11;
+    unsigned ch10 : 11;
+    unsigned ch11 : 11;
+    unsigned ch12 : 11;
+    unsigned ch13 : 11;
+    unsigned ch14 : 11;
+    unsigned ch15 : 11;
+    unsigned ch16 : 11;
+} PACKED crsf_payload_rc_channels_t;
 
 typedef struct {
     crsf_address_t source;
@@ -90,8 +107,11 @@ typedef struct {
     int16_t vspeed_cms;
 } crsf_payload_vario_t;
 
-// Unpack CRSF frame into payload structure
-bool crsf_payload_unpack__rc_channels(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload);
+bool crsf_payload__rc_channels_unpack(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload);
+void crsf_payload__rc_channels_pack(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload);
+uint16_t crsf_payload__rc_channels_get(const crsf_payload_rc_channels_t *payload, uint8_t channel);
+void crsf_payload__rc_channels_set(crsf_payload_rc_channels_t *payload, uint8_t channel, uint16_t value);
+
 bool crsf_payload_unpack__param_read(const crsf_frame_t *frame, crsf_payload_device_param_read_t *payload);
 // param write is unpacked in two passes, first extract param index
 // then look up the param type using the index
@@ -104,13 +124,11 @@ bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_
 bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload);
 
 // Pack payload structure into CRSF frame
-void crsf_payload_pack__rc_channels(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload);
 void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload);
 void crsf_payload_pack__param_entry(crsf_frame_t *frame, const crsf_payload_device_param_entry_t *payload);
 
 // Modify CRSF frame in place
 bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns);
-bool crsf_payload_modify__rc_channels(crsf_frame_t *frame, uint8_t channel, int16_t value);
 
 #ifdef __cplusplus
 }

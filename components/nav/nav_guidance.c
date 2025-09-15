@@ -66,7 +66,7 @@ bool nav_guidance_pursuit(
     if (r_perp_vel_i_norm > DBL_EPSILON) {
         la_float angular_error = la_asin(la_clamp2(r_perp_vel_i_norm, 1.0));
 
-        la_float accel_norm = N * vel_i_norm * angular_error;
+        la_float accel_norm = vel_i_norm * angular_error;
 
         la_scale(r_perp_vel_i_unit, accel_norm, accel, 3);
     }
@@ -167,8 +167,8 @@ void nav_guidance_compute_command(
     command->type = nav_guidance_compute_accel(g, range, vel_i, vel_t, command->accel);
 
     // compute lateral and vertical acceleration components
-    la_float vel_horizontal[3] = { vel_i[0], vel_i[1], 0.0 };
-    la_float down_unit[3] = { 0, 0, 1.0 };
+    la_float vel_horizontal[3] = { vel_i[0], vel_i[1], 0 };
+    la_float down_unit[3] = { 0, 0, 1 };
 
     la_float lateral_unit[3];
     la_vec_cross_3(down_unit, vel_horizontal, lateral_unit);
@@ -180,8 +180,8 @@ void nav_guidance_compute_command(
 
     command->accel_lateral = la_vec_dot(command->accel, lateral_unit, 3);
     command->accel_vertical = la_vec_dot(command->accel, down_unit, 3);
-    command->roll_deg = _NAV_RAD_TO_DEG(la_atan2(command->accel_lateral, NAV_G));
-    command->pitch_deg = _NAV_RAD_TO_DEG(-la_asin(la_clamp2(command->accel_vertical / NAV_G, 1.0)));
+    command->roll_deg = la_clamp2(_NAV_RAD_TO_DEG(la_atan2(command->accel_lateral, NAV_G)), g->max_roll_deg);
+    command->pitch_deg = la_clamp2(_NAV_RAD_TO_DEG(-la_asin(la_clamp2(command->accel_vertical / NAV_G, 1.0))), g->max_pitch_deg);
     command->roll_cmd = la_clamp2(command->roll_deg / g->max_roll_deg, 1.0);
     command->pitch_cmd = la_clamp2(command->pitch_deg / g->max_pitch_deg, 1.0);
 }
