@@ -47,7 +47,7 @@ bool nav_guidance_pursuit(
     const la_float *vel_i,
     la_float *accel);
 
-bool nav_guidance_pronav_true(
+bool nav_guidance_pronav(
     la_float N,
     const la_float *range,
     const la_float *vel_i, 

@@ -289,7 +289,7 @@ static void IRAM_ATTR _uart_wdt() {
             uint32_t best_packet_rate = 100;
             uint32_t best_diff = UINT32_MAX;
 
-            for (int i = 0; i < ARRAY_LENGTH(MIM_UART_BAUD_RATES); i++) {
+            for (int i = 0; i < UTIL_ARRAY_LENGTH(MIM_UART_BAUD_RATES); i++) {
                 uint32_t diff = abs((int32_t)MIM_UART_BAUD_RATES[i] - (int32_t)baud);
                 if (diff < best_diff) {
                     best_baud = MIM_UART_BAUD_RATES[i];

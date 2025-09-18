@@ -29,11 +29,12 @@ void skymap_init(skymap_t *sm) {
 
 void IRAM_ATTR skymap_update(skymap_t *sm, int64_t time) {
     sm->last_time = time;
-    sm->is_connected = (time > SKYMAP_CONNECTION_TIMEOUT_US) && 
-        ((time - sm->last_time_server_message) > SKYMAP_CONNECTION_TIMEOUT_US);
-    sm->is_client_message_ready = sm->is_connected &&
+    sm->is_connected =
+        ((time - sm->last_time_server_message) < SKYMAP_CONNECTION_TIMEOUT_US);
+    sm->is_client_message_ready = 
+        sm->is_connected &&
         ((time - sm->last_time_client_message) > SKYMAP_STATUS_TIMEOUT_US);
-    sm->is_ready_to_engage = (time > SKYMAP_CONNECTION_TIMEOUT_US) &&
+    sm->is_ready_to_engage = 
         ((time - sm->last_time_server_message) < SKYMAP_CONNECTION_TIMEOUT_US) &&
         ((time - sm->last_time_interceptor) < SKYMAP_CONNECTION_TIMEOUT_US) &&
         ((time - sm->last_time_target) < SKYMAP_CONNECTION_TIMEOUT_US) &&
@@ -87,7 +88,7 @@ skymap_err_t IRAM_ATTR skymap_read_server_message(skymap_t *sm, int64_t time, ui
     return err;
 }
 
-skymap_err_t IRAM_ATTR skymap_write_client_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written) {
+skymap_err_t IRAM_ATTR skymap_write_client_message_status(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written) {
     skymap_err_t err = SKYMAP_OK;
 
     ai_skyfortress_guidance_ClientMessage m = ai_skyfortress_guidance_ClientMessage_init_default;
@@ -109,6 +110,32 @@ skymap_err_t IRAM_ATTR skymap_write_client_message(skymap_t *sm, int64_t time, u
     }
 
     skymap_update(sm, time);
+
+    return err;
+}
+
+skymap_err_t IRAM_ATTR skymap_write_client_message_channels(skymap_t *sm, uint16_t *channels, uint8_t channel_count, uint8_t *data, uint16_t len, uint16_t *len_written) {
+    assert(channel_count == 4);
+    skymap_err_t err = SKYMAP_OK;
+
+    ai_skyfortress_guidance_ClientMessage m = ai_skyfortress_guidance_ClientMessage_init_default;
+    m.which_message = ai_skyfortress_guidance_ClientMessage_channels_tag;
+    m.message.channels.ch1 = channels[0];
+    m.message.channels.ch2 = channels[1];
+    m.message.channels.ch3 = channels[2];
+    m.message.channels.ch4 = channels[3];
+
+    pb_ostream_t stream = pb_ostream_from_buffer(data, len);
+
+    if (!pb_write(&stream, _skymap_header, SKYMAP_TATEP_HEADER_LEN)) {
+        ESP_LOGE(TAG, "Failed to write message header");
+        err = SKYMAP_ERR_HEADER_INVALID;
+    } else if (!pb_encode_ex(&stream, ai_skyfortress_guidance_ClientMessage_fields, &m, PB_ENCODE_DELIMITED)) {
+        ESP_LOGE(TAG, "Failed to encode client channels message");
+        err = SKYMAP_ERR_MESSAGE_INVALID;
+    } else {
+        *len_written = stream.bytes_written;
+    }
 
     return err;
 }

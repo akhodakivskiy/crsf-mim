@@ -36,6 +36,8 @@ void skymap_update(skymap_t *sm, int64_t time);
 
 skymap_err_t skymap_read_server_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len);
 
-skymap_err_t skymap_write_client_message(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written);
+skymap_err_t skymap_write_client_message_status(skymap_t *sm, int64_t time, uint8_t *data, uint16_t len, uint16_t *len_written);
+
+skymap_err_t skymap_write_client_message_channels(skymap_t *sm, uint16_t *channels, uint8_t channel_count, uint8_t *data, uint16_t len, uint16_t *len_written);
 
 #endif

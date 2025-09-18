@@ -270,19 +270,12 @@ esp_err_t IRAM_ATTR libnet_udp_send(const ip4_addr_t *dest_ip, uint16_t dest_por
         return ESP_ERR_INVALID_STATE;
     }
 
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0) {
-        ESP_LOGE(TAG, "Failed to create UDP socket for sending");
-        return ESP_FAIL;
-    }
-
     struct sockaddr_in dest_addr;
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_addr.s_addr = dest_ip->addr;
     dest_addr.sin_port = htons(dest_port);
 
-    int sent = sendto(sock, data, len, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
-    close(sock);
+    int sent = sendto(s_libnet_ctx.udp_server_socket, data, len, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
 
     if (sent < 0) {
         ESP_LOGE(TAG, "Failed to send UDP packet");

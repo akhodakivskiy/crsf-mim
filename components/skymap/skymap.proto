@@ -74,7 +74,7 @@ message ServerMessage {
     TargetEstimate target_estimate = 2;
     TargetEstimate interceptor_estimate = 3;
     RawData target_raw = 4;
-    RawData target_interceptor = 5;
+    RawData interceptor_raw = 5;
   }
 }
 
@@ -90,6 +90,16 @@ enum ClientState {
   Engaging = 2; // the client is currently engaging a target
 }
 
+message Channels {
+  int32 ch1 = 1;
+  int32 ch2 = 2;
+  int32 ch3 = 3;
+  int32 ch4 = 4;
+}
+
 message ClientMessage {
-  oneof message { ClientStatus status = 1; }
+  oneof message { 
+    ClientStatus status = 1; 
+    Channels channels = 2;
+  }
 }

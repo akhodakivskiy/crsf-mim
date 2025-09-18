@@ -24,17 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cskymap.proto\x12\x17\x61i.skyfortress.guidance\"+\n\tTimestamp\x12\x0f\n\x07seconds\x18\x01 \x01(\x03\x12\r\n\x05nanos\x18\x02 \x01(\x05\"\xdd\x02\n\x0eTargetEstimate\x12\x35\n\ttimestamp\x18\x01 \x01(\x0b\x32\".ai.skyfortress.guidance.Timestamp\x12\x19\n\x11precise_timestamp\x18\x02 \x01(\x08\x12\x11\n\ttarget_id\x18\x03 \x01(\t\x12\x30\n\x08position\x18\x04 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\x12\x36\n\x08velocity\x18\x05 \x01(\x0b\x32$.ai.skyfortress.guidance.EnuVelocity\x12\x35\n\x05state\x18\x06 \x01(\x0e\x32&.ai.skyfortress.guidance.EstimateState\x12\x45\n\runcertainties\x18\x07 \x01(\x0b\x32..ai.skyfortress.guidance.EstimateUncertainties\"\xcf\x01\n\x07RawData\x12\x39\n\rtimestamp_utc\x18\x01 \x01(\x0b\x32\".ai.skyfortress.guidance.Timestamp\x12\x10\n\x08track_id\x18\x03 \x01(\r\x12\x30\n\x08position\x18\x04 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\x12\x45\n\x14position_uncertainty\x18\x05 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\"\x8d\x01\n\x15\x45stimateUncertainties\x12\x39\n\x08position\x18\x01 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\x12\x39\n\x08velocity\x18\x02 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\"L\n\x05WGS84\x12\x14\n\x0clatitude_deg\x18\x01 \x01(\x02\x12\x15\n\rlongitude_deg\x18\x02 \x01(\x02\x12\x16\n\x0e\x61ltitude_msl_m\x18\x03 \x01(\x02\"?\n\x0b\x45nuVelocity\x12\x0f\n\x07\x65\x61st_ms\x18\x01 \x01(\x02\x12\x10\n\x08north_ms\x18\x02 \x01(\x02\x12\r\n\x05up_ms\x18\x03 \x01(\x02\"9\n\x0e\x45nuUncertainty\x12\x0c\n\x04\x65\x61st\x18\x01 \x01(\x02\x12\r\n\x05north\x18\x02 \x01(\x02\x12\n\n\x02up\x18\x03 \x01(\x02\"\x06\n\x04Ping\"\xce\x02\n\rServerMessage\x12-\n\x04ping\x18\x01 \x01(\x0b\x32\x1d.ai.skyfortress.guidance.PingH\x00\x12\x42\n\x0ftarget_estimate\x18\x02 \x01(\x0b\x32\'.ai.skyfortress.guidance.TargetEstimateH\x00\x12G\n\x14interceptor_estimate\x18\x03 \x01(\x0b\x32\'.ai.skyfortress.guidance.TargetEstimateH\x00\x12\x36\n\ntarget_raw\x18\x04 \x01(\x0b\x32 .ai.skyfortress.guidance.RawDataH\x00\x12>\n\x12target_interceptor\x18\x05 \x01(\x0b\x32 .ai.skyfortress.guidance.RawDataH\x00\x42\t\n\x07message\"u\n\x0c\x43lientStatus\x12\x33\n\x05state\x18\x01 \x01(\x0e\x32$.ai.skyfortress.guidance.ClientState\x12\x30\n\x08position\x18\x02 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\"S\n\rClientMessage\x12\x37\n\x06status\x18\x01 \x01(\x0b\x32%.ai.skyfortress.guidance.ClientStatusH\x00\x42\t\n\x07message*)\n\rEstimateState\x12\x0c\n\x08Unstable\x10\x00\x12\n\n\x06Stable\x10\x01*4\n\x0b\x43lientState\x12\x0c\n\x08NotReady\x10\x00\x12\t\n\x05Ready\x10\x01\x12\x0c\n\x08\x45ngaging\x10\x02\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cskymap.proto\x12\x17\x61i.skyfortress.guidance\"+\n\tTimestamp\x12\x0f\n\x07seconds\x18\x01 \x01(\x03\x12\r\n\x05nanos\x18\x02 \x01(\x05\"\xdd\x02\n\x0eTargetEstimate\x12\x35\n\ttimestamp\x18\x01 \x01(\x0b\x32\".ai.skyfortress.guidance.Timestamp\x12\x19\n\x11precise_timestamp\x18\x02 \x01(\x08\x12\x11\n\ttarget_id\x18\x03 \x01(\t\x12\x30\n\x08position\x18\x04 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\x12\x36\n\x08velocity\x18\x05 \x01(\x0b\x32$.ai.skyfortress.guidance.EnuVelocity\x12\x35\n\x05state\x18\x06 \x01(\x0e\x32&.ai.skyfortress.guidance.EstimateState\x12\x45\n\runcertainties\x18\x07 \x01(\x0b\x32..ai.skyfortress.guidance.EstimateUncertainties\"\xcf\x01\n\x07RawData\x12\x39\n\rtimestamp_utc\x18\x01 \x01(\x0b\x32\".ai.skyfortress.guidance.Timestamp\x12\x10\n\x08track_id\x18\x03 \x01(\r\x12\x30\n\x08position\x18\x04 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\x12\x45\n\x14position_uncertainty\x18\x05 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\"\x8d\x01\n\x15\x45stimateUncertainties\x12\x39\n\x08position\x18\x01 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\x12\x39\n\x08velocity\x18\x02 \x01(\x0b\x32\'.ai.skyfortress.guidance.EnuUncertainty\"L\n\x05WGS84\x12\x14\n\x0clatitude_deg\x18\x01 \x01(\x02\x12\x15\n\rlongitude_deg\x18\x02 \x01(\x02\x12\x16\n\x0e\x61ltitude_msl_m\x18\x03 \x01(\x02\"?\n\x0b\x45nuVelocity\x12\x0f\n\x07\x65\x61st_ms\x18\x01 \x01(\x02\x12\x10\n\x08north_ms\x18\x02 \x01(\x02\x12\r\n\x05up_ms\x18\x03 \x01(\x02\"9\n\x0e\x45nuUncertainty\x12\x0c\n\x04\x65\x61st\x18\x01 \x01(\x02\x12\r\n\x05north\x18\x02 \x01(\x02\x12\n\n\x02up\x18\x03 \x01(\x02\"\x06\n\x04Ping\"\xcb\x02\n\rServerMessage\x12-\n\x04ping\x18\x01 \x01(\x0b\x32\x1d.ai.skyfortress.guidance.PingH\x00\x12\x42\n\x0ftarget_estimate\x18\x02 \x01(\x0b\x32\'.ai.skyfortress.guidance.TargetEstimateH\x00\x12G\n\x14interceptor_estimate\x18\x03 \x01(\x0b\x32\'.ai.skyfortress.guidance.TargetEstimateH\x00\x12\x36\n\ntarget_raw\x18\x04 \x01(\x0b\x32 .ai.skyfortress.guidance.RawDataH\x00\x12;\n\x0finterceptor_raw\x18\x05 \x01(\x0b\x32 .ai.skyfortress.guidance.RawDataH\x00\x42\t\n\x07message\"u\n\x0c\x43lientStatus\x12\x33\n\x05state\x18\x01 \x01(\x0e\x32$.ai.skyfortress.guidance.ClientState\x12\x30\n\x08position\x18\x02 \x01(\x0b\x32\x1e.ai.skyfortress.guidance.WGS84\">\n\x08\x43hannels\x12\x0b\n\x03\x63h1\x18\x01 \x01(\x05\x12\x0b\n\x03\x63h2\x18\x02 \x01(\x05\x12\x0b\n\x03\x63h3\x18\x03 \x01(\x05\x12\x0b\n\x03\x63h4\x18\x04 \x01(\x05\"\x8a\x01\n\rClientMessage\x12\x37\n\x06status\x18\x01 \x01(\x0b\x32%.ai.skyfortress.guidance.ClientStatusH\x00\x12\x35\n\x08\x63hannels\x18\x02 \x01(\x0b\x32!.ai.skyfortress.guidance.ChannelsH\x00\x42\t\n\x07message*)\n\rEstimateState\x12\x0c\n\x08Unstable\x10\x00\x12\n\n\x06Stable\x10\x01*4\n\x0b\x43lientState\x12\x0c\n\x08NotReady\x10\x00\x12\t\n\x05Ready\x10\x01\x12\x0c\n\x08\x45ngaging\x10\x02\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'skymap_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ESTIMATESTATE']._serialized_start=1543
-  _globals['_ESTIMATESTATE']._serialized_end=1584
-  _globals['_CLIENTSTATE']._serialized_start=1586
-  _globals['_CLIENTSTATE']._serialized_end=1638
+  _globals['_ESTIMATESTATE']._serialized_start=1660
+  _globals['_ESTIMATESTATE']._serialized_end=1701
+  _globals['_CLIENTSTATE']._serialized_start=1703
+  _globals['_CLIENTSTATE']._serialized_end=1755
   _globals['_TIMESTAMP']._serialized_start=41
   _globals['_TIMESTAMP']._serialized_end=84
   _globals['_TARGETESTIMATE']._serialized_start=87
@@ -52,9 +52,11 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PING']._serialized_start=994
   _globals['_PING']._serialized_end=1000
   _globals['_SERVERMESSAGE']._serialized_start=1003
-  _globals['_SERVERMESSAGE']._serialized_end=1337
-  _globals['_CLIENTSTATUS']._serialized_start=1339
-  _globals['_CLIENTSTATUS']._serialized_end=1456
-  _globals['_CLIENTMESSAGE']._serialized_start=1458
-  _globals['_CLIENTMESSAGE']._serialized_end=1541
+  _globals['_SERVERMESSAGE']._serialized_end=1334
+  _globals['_CLIENTSTATUS']._serialized_start=1336
+  _globals['_CLIENTSTATUS']._serialized_end=1453
+  _globals['_CHANNELS']._serialized_start=1455
+  _globals['_CHANNELS']._serialized_end=1517
+  _globals['_CLIENTMESSAGE']._serialized_start=1520
+  _globals['_CLIENTMESSAGE']._serialized_end=1658
 # @@protoc_insertion_point(module_scope)

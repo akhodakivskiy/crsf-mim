@@ -74,7 +74,7 @@ bool nav_guidance_pursuit(
     return true;
 }
 
-bool nav_guidance_pronav_true(
+bool nav_guidance_pronav(
     la_float N,
     const la_float *range,
     const la_float *vel_i, 
@@ -91,9 +91,11 @@ bool nav_guidance_pronav_true(
         return false;
     }
 
-    la_float range_norm_sq = la_vec_dot(range, range, 3);
+    la_float range_unit[3];
+    la_float range_norm = la_vec_unit(range, range_unit, 3);
+    la_float range_norm_sq = range_norm * range_norm;
 
-    if (range_norm_sq < 1) {
+    if (range_norm < LA_EPSILON) {
         ESP_LOGW(TAG, "PRONAV: low range");
         return false;
     }
@@ -114,7 +116,13 @@ bool nav_guidance_pronav_true(
     la_scale(omega, 1.0 / range_norm_sq, omega, 3);
 
     // ProNav calculation
+
+    /* pure pronav */
     la_vec_cross_3(vel_i_unit, omega, accel);
+
+    /* true pronav */
+    // la_vec_cross_3(range_unit, omega, accel);
+
     la_scale(accel, -N * v_norm, accel, 3);
 
     return true;
@@ -134,12 +142,14 @@ nav_guidance_type_t nav_guidance_compute_accel(
     la_sub(vel_t, vel_i, v, 3);
     la_float closing_speed = -la_vec_dot(v, range_unit, 3);
 
+    ESP_LOGI(TAG, "closing_speed=%f, range=%f", closing_speed, range_norm);
+
     if (closing_speed < 0 && range_norm > 100) {
         if (nav_guidance_pursuit(g->N, range, vel_i, accel)) {
             return NAV_GUIDANCE_PURSUIT;
         }
     } else {
-        if (nav_guidance_pronav_true(g->N, range, vel_i, vel_t, accel)) {
+        if (nav_guidance_pronav(g->N, range, vel_i, vel_t, accel)) {
             return NAV_GUIDANCE_PRONAV;
         }
     }

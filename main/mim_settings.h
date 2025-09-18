@@ -15,6 +15,7 @@ typedef struct {
     float N;
     uint8_t max_roll_deg;
     uint8_t max_pitch_deg;
+    bool pitch_invert;
 } mim_settings_guidance_t;
 
 typedef struct {
@@ -47,6 +48,8 @@ esp_err_t mim_settings_set_guidance_N(float N);
 esp_err_t mim_settings_set_guidance_max_roll_deg(uint8_t max_roll_deg);
 
 esp_err_t mim_settings_set_guidance_max_pitch_deg(uint8_t max_pitch_deg);
+
+esp_err_t mim_settings_set_guidance_pitch_invert(bool invert);
 
 esp_err_t mim_settings_reset_to_defaults(void);
 

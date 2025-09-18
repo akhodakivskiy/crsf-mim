@@ -25,6 +25,7 @@ static const mim_settings_t mim_settings_default = {
         .N = 3,
         .max_roll_deg = 35,
         .max_pitch_deg = 25,
+        .pitch_invert = true,
     }
 };
 
@@ -184,6 +185,15 @@ esp_err_t mim_settings_set_guidance_max_pitch_deg(uint8_t max_pitch_deg) {
     }
 
     mim_settings_current.guidance.max_pitch_deg = max_pitch_deg;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_guidance_pitch_invert(bool invert) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.guidance.pitch_invert = invert;
     return ESP_OK;
 }
 

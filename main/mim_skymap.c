@@ -2,6 +2,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/idf_additions.h"
+#include "libcrsf_def.h"
 #include "portmacro.h"
 #include "skymap.h"
 #include "skymap.pb.h"
@@ -126,8 +127,10 @@ static IRAM_ATTR void _task_skymap_impl(void *arg) {
 
             uint16_t len_written = 0;
 
-            if (skymap_write_client_message(&_skymap_ctx.skymap, esp_timer_get_time(), data, sizeof(data), &len_written) == SKYMAP_OK) {
-                ESP_ERROR_CHECK(libnet_udp_send(&_skymap_ctx.skymap_addr, _skymap_ctx.skymap_port, data, len_written));
+            if (skymap_write_client_message_status(&_skymap_ctx.skymap, esp_timer_get_time(), data, sizeof(data), &len_written) == SKYMAP_OK) {
+                if (ESP_OK != libnet_udp_send(&_skymap_ctx.skymap_addr, _skymap_ctx.skymap_port, data, len_written)) {
+                    ESP_LOGE(TAG, "failed to send status message");
+                }
             }
         } else {
             skymap_update(&_skymap_ctx.skymap, esp_timer_get_time());
@@ -141,6 +144,12 @@ static IRAM_ATTR void _task_skymap_impl(void *arg) {
 static void IRAM_ATTR _skymap_update() {
     if (_skymap_ctx.guidance_enabled && _skymap_ctx.skymap.is_ready_to_engage) {
         skymap_t *sm = &_skymap_ctx.skymap;
+
+        nav_guidance_t nav_config = {
+            .N = mim_settings_get()->guidance.N,
+            .max_roll_deg = mim_settings_get()->guidance.max_roll_deg,
+            .max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg
+        };
 
         nav_guidance_state_t state_interceptor = {
             .lat = sm->interceptor.position.latitude_deg,
@@ -160,12 +169,6 @@ static void IRAM_ATTR _skymap_update() {
             .vel_up = sm->target.velocity.up_ms
         };
 
-        nav_guidance_t nav_config = {
-            .N = mim_settings_get()->guidance.N,
-            .max_roll_deg = mim_settings_get()->guidance.max_roll_deg,
-            .max_pitch_deg = mim_settings_get()->guidance.max_pitch_deg
-        };
-
         nav_guidance_command_t command;
 
         nav_guidance_compute_command(
@@ -175,15 +178,43 @@ static void IRAM_ATTR _skymap_update() {
             &command
         );
 
-        ESP_LOGI(TAG, "accel lat=%f, ver=%f, roll=%f, pitch=%f", 
-                 command.accel_lateral, command.accel_vertical,
-                 command.roll_deg, command.pitch_deg);
-
         if (command.type == NAV_GUIDANCE_NONE) {
             mim_rc_clear_overrides();
         } else {
-            mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, command.roll_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
-            mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, command.pitch_cmd, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+            ESP_LOGI(TAG, "type=%u accel lat=%f, ver=%f, roll=%f, pitch=[%f, inv=%u]", 
+                     command.type,
+                     command.accel_lateral, command.accel_vertical,
+                     command.roll_deg, command.pitch_deg, mim_settings_get()->guidance.pitch_invert);
+
+            int pitch_factor = mim_settings_get()->guidance.pitch_invert ? -1 : 1;
+
+            uint16_t roll_ticks = CRSF_RC_CHANNELS_CENTER + command.roll_cmd * CRSF_RC_CHANNELS_RANGE / 2;
+            uint16_t pitch_ticks = CRSF_RC_CHANNELS_CENTER + command.pitch_cmd * CRSF_RC_CHANNELS_RANGE / 2 * pitch_factor;
+
+            mim_rc_override_channel(MIM_RC_CHANNEL_ROLL, roll_ticks, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
+            mim_rc_override_channel(MIM_RC_CHANNEL_PITCH, pitch_ticks, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
         }
     }
+
+#ifdef CONFIG_CRSF_MIM_CHANNELS_RESPONSE
+        uint16_t channels[4];
+        mim_rc_get_4_channels(channels, 4);
+
+        channels[0] = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, channels[0]);
+        channels[1] = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, channels[1]);
+
+        for (int i = 0; i < 4; i++) {
+            channels[i] = CRSF_RC_CHANNELS_TICKS_TO_US(channels[i]);
+        }
+
+        uint8_t data[ai_skyfortress_guidance_Channels_size + 4];
+        uint16_t len_written;
+
+        if (skymap_write_client_message_channels(&_skymap_ctx.skymap, channels, 4, data, sizeof(data), &len_written) == SKYMAP_OK) {
+            ESP_LOGI(TAG, "channels reply %u, %u, %u, %u", channels[0], channels[1], channels[2], channels[3]);
+            if (ESP_OK != libnet_udp_send(&_skymap_ctx.skymap_addr, _skymap_ctx.skymap_port, data, len_written)) {
+                ESP_LOGE(TAG, "failed to send channels message");
+            }
+        }
+#endif
 }

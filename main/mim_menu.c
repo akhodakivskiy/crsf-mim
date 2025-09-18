@@ -162,6 +162,21 @@ void _param_u8_guidance_max_pitch_deg_set(const crsf_device_param_write_value_t 
     mim_settings_save();
 }
 
+void _param_select_guidance_pitch_invert_get(crsf_device_param_read_value_t *value) {
+    value->select.index = mim_settings_get()->guidance.pitch_invert ? 0 : 1;
+    value->select.option_count = 2;
+    value->select.options[0] = "yes";
+    value->select.options[1] = "no";
+    value->select.units = "";
+}
+
+void _param_select_guidance_pitch_invert_set(const crsf_device_param_write_value_t *value) {
+    assert(value->select_index == 0 || value->select_index == 1);
+
+    mim_settings_set_guidance_pitch_invert(value->select_index == 0);
+    mim_settings_save();
+}
+
 void _param_command_test_rc_get(crsf_device_param_read_value_t *value) {
     switch (_test_rc_state) {
         case _MIM_MENU_TEST_RC_IDLE:
@@ -239,6 +254,20 @@ void mim_menu_init(crsf_device_t *device) {
     crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
                           _param_folder_guidance_get, NULL);
 
+    crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, guidance, 
+                          _param_float_guidance_N_get, 
+                          _param_float_guidance_N_set);
+    crsf_device_add_param(device, "max roll", CRSF_PARAM_TYPE_UINT8, guidance, 
+                          _param_u8_guidance_max_roll_deg_get, 
+                          _param_u8_guidance_max_roll_deg_set);
+    crsf_device_add_param(device, "max pitch", CRSF_PARAM_TYPE_UINT8, guidance, 
+                          _param_u8_guidance_max_pitch_deg_get, 
+                          _param_u8_guidance_max_pitch_deg_set);
+
+    crsf_device_add_param(device, "pitch invert", CRSF_PARAM_TYPE_SELECT, guidance, 
+                          _param_select_guidance_pitch_invert_get, 
+                          _param_select_guidance_pitch_invert_set);
+
     crsf_device_add_param(device, "test RC", CRSF_PARAM_TYPE_COMMAND, NULL,
                           _param_command_test_rc_get,
                           _param_command_test_rc_set);
@@ -257,16 +286,6 @@ void mim_menu_init(crsf_device_t *device) {
     crsf_device_add_param(device, "engage chan", CRSF_PARAM_TYPE_UINT8, NULL, 
                           _param_u8_engage_channel_get, 
                           _param_u8_engage_channel_set);
-
-    crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, guidance, 
-                          _param_float_guidance_N_get, 
-                          _param_float_guidance_N_set);
-    crsf_device_add_param(device, "max roll", CRSF_PARAM_TYPE_UINT8, guidance, 
-                          _param_u8_guidance_max_roll_deg_get, 
-                          _param_u8_guidance_max_roll_deg_set);
-    crsf_device_add_param(device, "max pitch", CRSF_PARAM_TYPE_UINT8, guidance, 
-                          _param_u8_guidance_max_pitch_deg_get, 
-                          _param_u8_guidance_max_pitch_deg_set);
 
 }
 

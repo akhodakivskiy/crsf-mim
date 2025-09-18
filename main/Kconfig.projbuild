@@ -23,4 +23,9 @@ menu "CRSF-MIM"
         int "UDP port for Skymap"
         help
             "UDP Port on which Skymap will send TATEP traffic"
+    config CRSF_MIM_CHANNELS_RESPONSE
+        bool "Respond with Channels Message"
+        default n
+        help
+            Will respond with overridden first 4 channels for debugging
 endmenu

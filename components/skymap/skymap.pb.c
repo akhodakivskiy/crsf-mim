@@ -36,6 +36,9 @@ PB_BIND(ai_skyfortress_guidance_ServerMessage, ai_skyfortress_guidance_ServerMes
 PB_BIND(ai_skyfortress_guidance_ClientStatus, ai_skyfortress_guidance_ClientStatus, AUTO)
 
 
+PB_BIND(ai_skyfortress_guidance_Channels, ai_skyfortress_guidance_Channels, AUTO)
+
+
 PB_BIND(ai_skyfortress_guidance_ClientMessage, ai_skyfortress_guidance_ClientMessage, AUTO)
 
 

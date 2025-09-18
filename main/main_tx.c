@@ -145,6 +145,11 @@ static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
         uint16_t engage_value = crsf_payload__rc_channels_get(&rc, engage_channel);
         mim_skymap_guidance_enable(engage_value > CRSF_RC_CHANNELS_CENTER);
 
+#ifdef CONFIG_CRSF_MIM_CHANNELS_RESPONSE
+        uint16_t channels[4] = { rc.ch1, rc.ch2, rc.ch3, rc.ch4 };
+        mim_rc_set_4_channels(channels, 4);
+#endif
+
         // override channels
         uint16_t roll = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_ROLL));
         uint16_t pitch = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_PITCH));
@@ -157,11 +162,13 @@ static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
         static int64_t last_log_time = 0;
         if (esp_timer_get_time() > last_log_time + 1000000) {
             last_log_time = esp_timer_get_time();
+            /*
             ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
                      rc.ch1, rc.ch2,  rc.ch3,  rc.ch4,  rc.ch5,  rc.ch6,  rc.ch7,  rc.ch8, 
                      rc.ch9, rc.ch10, rc.ch11, rc.ch12, rc.ch13, rc.ch14, rc.ch15, rc.ch16);
             ESP_LOGI(TAG, "engage[channel=%u, value=%u], roll: %u, pitch: %u",
                      engage_channel, engage_value, roll, pitch);
+            */
         }
     }
 }

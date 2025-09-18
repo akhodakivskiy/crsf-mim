@@ -105,10 +105,18 @@ typedef struct _ai_skyfortress_guidance_ClientStatus {
     ai_skyfortress_guidance_WGS84 position; /* [optional] */
 } ai_skyfortress_guidance_ClientStatus;
 
+typedef struct _ai_skyfortress_guidance_Channels {
+    int32_t ch1;
+    int32_t ch2;
+    int32_t ch3;
+    int32_t ch4;
+} ai_skyfortress_guidance_Channels;
+
 typedef struct _ai_skyfortress_guidance_ClientMessage {
     pb_size_t which_message;
     union {
         ai_skyfortress_guidance_ClientStatus status;
+        ai_skyfortress_guidance_Channels channels;
     } message;
 } ai_skyfortress_guidance_ClientMessage;
 
@@ -140,6 +148,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define ai_skyfortress_guidance_Timestamp_init_default {0, 0}
 #define ai_skyfortress_guidance_TargetEstimate_init_default {false, ai_skyfortress_guidance_Timestamp_init_default, 0, {{NULL}, NULL}, false, ai_skyfortress_guidance_WGS84_init_default, false, ai_skyfortress_guidance_EnuVelocity_init_default, _ai_skyfortress_guidance_EstimateState_MIN, false, ai_skyfortress_guidance_EstimateUncertainties_init_default}
@@ -151,6 +160,7 @@ extern "C" {
 #define ai_skyfortress_guidance_Ping_init_default {0}
 #define ai_skyfortress_guidance_ServerMessage_init_default {0, {ai_skyfortress_guidance_Ping_init_default}}
 #define ai_skyfortress_guidance_ClientStatus_init_default {_ai_skyfortress_guidance_ClientState_MIN, false, ai_skyfortress_guidance_WGS84_init_default}
+#define ai_skyfortress_guidance_Channels_init_default {0, 0, 0, 0}
 #define ai_skyfortress_guidance_ClientMessage_init_default {0, {ai_skyfortress_guidance_ClientStatus_init_default}}
 #define ai_skyfortress_guidance_Timestamp_init_zero {0, 0}
 #define ai_skyfortress_guidance_TargetEstimate_init_zero {false, ai_skyfortress_guidance_Timestamp_init_zero, 0, {{NULL}, NULL}, false, ai_skyfortress_guidance_WGS84_init_zero, false, ai_skyfortress_guidance_EnuVelocity_init_zero, _ai_skyfortress_guidance_EstimateState_MIN, false, ai_skyfortress_guidance_EstimateUncertainties_init_zero}
@@ -162,6 +172,7 @@ extern "C" {
 #define ai_skyfortress_guidance_Ping_init_zero   {0}
 #define ai_skyfortress_guidance_ServerMessage_init_zero {0, {ai_skyfortress_guidance_Ping_init_zero}}
 #define ai_skyfortress_guidance_ClientStatus_init_zero {_ai_skyfortress_guidance_ClientState_MIN, false, ai_skyfortress_guidance_WGS84_init_zero}
+#define ai_skyfortress_guidance_Channels_init_zero {0, 0, 0, 0}
 #define ai_skyfortress_guidance_ClientMessage_init_zero {0, {ai_skyfortress_guidance_ClientStatus_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -196,7 +207,12 @@ extern "C" {
 #define ai_skyfortress_guidance_ServerMessage_interceptor_raw_tag 5
 #define ai_skyfortress_guidance_ClientStatus_state_tag 1
 #define ai_skyfortress_guidance_ClientStatus_position_tag 2
+#define ai_skyfortress_guidance_Channels_ch1_tag 1
+#define ai_skyfortress_guidance_Channels_ch2_tag 2
+#define ai_skyfortress_guidance_Channels_ch3_tag 3
+#define ai_skyfortress_guidance_Channels_ch4_tag 4
 #define ai_skyfortress_guidance_ClientMessage_status_tag 1
+#define ai_skyfortress_guidance_ClientMessage_channels_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define ai_skyfortress_guidance_Timestamp_FIELDLIST(X, a) \
@@ -286,11 +302,21 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  position,          2)
 #define ai_skyfortress_guidance_ClientStatus_DEFAULT NULL
 #define ai_skyfortress_guidance_ClientStatus_position_MSGTYPE ai_skyfortress_guidance_WGS84
 
+#define ai_skyfortress_guidance_Channels_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, INT32,    ch1,               1) \
+X(a, STATIC,   SINGULAR, INT32,    ch2,               2) \
+X(a, STATIC,   SINGULAR, INT32,    ch3,               3) \
+X(a, STATIC,   SINGULAR, INT32,    ch4,               4)
+#define ai_skyfortress_guidance_Channels_CALLBACK NULL
+#define ai_skyfortress_guidance_Channels_DEFAULT NULL
+
 #define ai_skyfortress_guidance_ClientMessage_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (message,status,message.status),   1)
+X(a, STATIC,   ONEOF,    MESSAGE,  (message,status,message.status),   1) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (message,channels,message.channels),   2)
 #define ai_skyfortress_guidance_ClientMessage_CALLBACK NULL
 #define ai_skyfortress_guidance_ClientMessage_DEFAULT NULL
 #define ai_skyfortress_guidance_ClientMessage_message_status_MSGTYPE ai_skyfortress_guidance_ClientStatus
+#define ai_skyfortress_guidance_ClientMessage_message_channels_MSGTYPE ai_skyfortress_guidance_Channels
 
 extern const pb_msgdesc_t ai_skyfortress_guidance_Timestamp_msg;
 extern const pb_msgdesc_t ai_skyfortress_guidance_TargetEstimate_msg;
@@ -302,6 +328,7 @@ extern const pb_msgdesc_t ai_skyfortress_guidance_EnuUncertainty_msg;
 extern const pb_msgdesc_t ai_skyfortress_guidance_Ping_msg;
 extern const pb_msgdesc_t ai_skyfortress_guidance_ServerMessage_msg;
 extern const pb_msgdesc_t ai_skyfortress_guidance_ClientStatus_msg;
+extern const pb_msgdesc_t ai_skyfortress_guidance_Channels_msg;
 extern const pb_msgdesc_t ai_skyfortress_guidance_ClientMessage_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -315,13 +342,15 @@ extern const pb_msgdesc_t ai_skyfortress_guidance_ClientMessage_msg;
 #define ai_skyfortress_guidance_Ping_fields &ai_skyfortress_guidance_Ping_msg
 #define ai_skyfortress_guidance_ServerMessage_fields &ai_skyfortress_guidance_ServerMessage_msg
 #define ai_skyfortress_guidance_ClientStatus_fields &ai_skyfortress_guidance_ClientStatus_msg
+#define ai_skyfortress_guidance_Channels_fields &ai_skyfortress_guidance_Channels_msg
 #define ai_skyfortress_guidance_ClientMessage_fields &ai_skyfortress_guidance_ClientMessage_msg
 
 /* Maximum encoded size of messages (where known) */
 /* ai_skyfortress_guidance_TargetEstimate_size depends on runtime parameters */
 /* ai_skyfortress_guidance_ServerMessage_size depends on runtime parameters */
 #define AI_SKYFORTRESS_GUIDANCE_SKYMAP_PB_H_MAX_SIZE ai_skyfortress_guidance_RawData_size
-#define ai_skyfortress_guidance_ClientMessage_size 21
+#define ai_skyfortress_guidance_Channels_size    44
+#define ai_skyfortress_guidance_ClientMessage_size 46
 #define ai_skyfortress_guidance_ClientStatus_size 19
 #define ai_skyfortress_guidance_EnuUncertainty_size 15
 #define ai_skyfortress_guidance_EnuVelocity_size 15
