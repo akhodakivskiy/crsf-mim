@@ -34,43 +34,43 @@ void IRAM_ATTR crsf_payload__rc_channels_pack(crsf_frame_t *frame, const crsf_pa
 
 uint16_t IRAM_ATTR crsf_payload__rc_channels_get(const crsf_payload_rc_channels_t *payload, uint8_t channel) {
     switch (channel) {
-        case 1: return payload->ch1;
-        case 2: return payload->ch2;
-        case 3: return payload->ch3;
-        case 4: return payload->ch4;
-        case 5: return payload->ch5;
-        case 6: return payload->ch6;
-        case 7: return payload->ch7;
-        case 8: return payload->ch8;
-        case 9: return payload->ch9;
-        case 10: return payload->ch10;
-        case 11: return payload->ch11;
-        case 12: return payload->ch12;
-        case 13: return payload->ch13;
-        case 14: return payload->ch14;
-        case 15: return payload->ch15;
-        case 16: return payload->ch16;
+        case 0: return payload->ch1;
+        case 1: return payload->ch2;
+        case 2: return payload->ch3;
+        case 3: return payload->ch4;
+        case 4: return payload->ch5;
+        case 5: return payload->ch6;
+        case 6: return payload->ch7;
+        case 7: return payload->ch8;
+        case 8: return payload->ch9;
+        case 9: return payload->ch10;
+        case 10: return payload->ch11;
+        case 11: return payload->ch12;
+        case 12: return payload->ch13;
+        case 13: return payload->ch14;
+        case 14: return payload->ch15;
+        case 15: return payload->ch16;
         default: assert(false);
     }
 }
 void IRAM_ATTR crsf_payload__rc_channels_set(crsf_payload_rc_channels_t *payload, uint8_t channel, uint16_t value) {
     switch (channel) {
-        case 1: payload->ch1 = value; return;
-        case 2: payload->ch2 = value; return;
-        case 3: payload->ch3 = value; return;
-        case 4: payload->ch4 = value; return;
-        case 5: payload->ch5 = value; return;
-        case 6: payload->ch6 = value; return;
-        case 7: payload->ch7 = value; return;
-        case 8: payload->ch8 = value; return;
-        case 9: payload->ch9 = value; return;
-        case 10: payload->ch10 = value; return;
-        case 11: payload->ch11 = value; return;
-        case 12: payload->ch12 = value; return;
-        case 13: payload->ch13 = value; return;
-        case 14: payload->ch14 = value; return;
-        case 15: payload->ch15 = value; return;
-        case 16: payload->ch16 = value; return;
+        case 0: payload->ch1 = value; return;
+        case 1: payload->ch2 = value; return;
+        case 2: payload->ch3 = value; return;
+        case 3: payload->ch4 = value; return;
+        case 4: payload->ch5 = value; return;
+        case 5: payload->ch6 = value; return;
+        case 6: payload->ch7 = value; return;
+        case 7: payload->ch8 = value; return;
+        case 8: payload->ch9 = value; return;
+        case 9: payload->ch10 = value; return;
+        case 10: payload->ch11 = value; return;
+        case 11: payload->ch12 = value; return;
+        case 12: payload->ch13 = value; return;
+        case 13: payload->ch14 = value; return;
+        case 14: payload->ch15 = value; return;
+        case 15: payload->ch16 = value; return;
         default: assert(false);
     }
 }

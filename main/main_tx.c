@@ -42,66 +42,37 @@ static const char *TAG_SKYMAP = "MAIN_TX_SKYMAP";
 #define UART_PIN_CONTROLLER GPIO_NUM_46
 #define UART_PIN_MODULE GPIO_NUM_45
 
-typedef struct {
-    const char *name;
-    uint32_t frames;
-    uint32_t frames_by_type[UINT8_MAX];
-} frame_counter_t;
-
-static void _frame_handler_controller(crsf_frame_t *frame);
 static void _frame_handler_module(crsf_frame_t *frame);
-static void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter);
-static void _skymap_handler(crsf_frame_t *frame);
+static void _frame_handler_controller(crsf_frame_t *frame);
+static void _frame_handler_controller_rc(crsf_frame_t *frame);
 
 crsf_device_t crsf_device;
-
-frame_counter_t _counter_controller;
-frame_counter_t _counter_module;
+mim_skymap_handle_t skymap;
 
 void app_main(void) {
-    memset(&_counter_controller, 0, sizeof(frame_counter_t));
-    _counter_controller.name = "CONTROLLER";
-    memset(&_counter_module, 0, sizeof(frame_counter_t));
-    _counter_module.name = "MODULE";
-
     async_logging_init(PRIORITY_TASK_ASYNC_LOGGING, PRO_CPU_NUM);
 
     // init and load settings
     mim_settings_init();
     mim_settings_load();
 
+    // init CRSF device menu
+    mim_menu_init(&crsf_device);
+
+    ESP_ERROR_CHECK(mim_skymap_init(PRIORITY_TASK_SKYMAP, &skymap));
+
+    ESP_LOGI(TAG, "initializing UART");
+
+    mim_uart_set_module_handler(_frame_handler_module);
+    mim_uart_set_controller_handler(_frame_handler_controller);
+
     // init UART tasks and set frame handler
     mim_uart_init(PRIORITY_TASK_CRSF, 
                   UART_PORT_CONTROLLER, UART_PIN_CONTROLLER, 
                   UART_PORT_MODULE, UART_PIN_MODULE);
-
-    mim_uart_set_controller_handler(_frame_handler_controller);
-    mim_uart_set_module_handler(_frame_handler_module);
-
-    // init CRSF device menu
-    mim_menu_init(&crsf_device);
-
-    mim_skymap_init(PRIORITY_TASK_SKYMAP);
-}
-
-static IRAM_ATTR void _frame_handler_controller(crsf_frame_t *frame) {
-    _count_frames(frame, &_counter_controller);
-
-    crsf_frame_t frame_out;
-    crsf_device_result_t err = crsf_device_client_handler(&crsf_device, frame, &frame_out);
-
-    if (err == CRSF_DEVICE_RESULT_OK) {
-        // first handle menu frame
-        mim_uart_enqueue_module_frame(&frame_out);
-    } else {
-        // then run skymap handler
-        _skymap_handler(frame);
-    }
 }
 
 static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
-    _count_frames(frame, &_counter_module);
-
     /*
     union {
         crsf_payload_gps_t gps;
@@ -120,39 +91,35 @@ static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
     */
 }
 
-static IRAM_ATTR void _count_frames(const crsf_frame_t *frame, frame_counter_t *counter) {
+static IRAM_ATTR void _frame_handler_controller(crsf_frame_t *frame) {
+    crsf_frame_t frame_out;
+    crsf_device_result_t err = crsf_device_client_handler(&crsf_device, frame, &frame_out);
 
-    counter->frames += 1;
-    counter->frames_by_type[frame->type] = counter->frames_by_type[frame->type] + 1;
-
-    if (counter->frames % 100 == 0) {
-        char log[256];
-        size_t log_cursor = 0;
-        for (int i = 0; i < UINT8_MAX; i++) {
-            if (counter->frames_by_type[i] > 0) {
-                log_cursor += snprintf(log + log_cursor, 256 - log_cursor, "0x%x=%lu, ", i, counter->frames_by_type[i]);
-            }
-        }
-        //ESP_LOGI(TAG, "%s - %s", counter->name, log);
+    if (err == CRSF_DEVICE_RESULT_OK) {
+        // first handle menu frame
+        mim_uart_enqueue_module_frame(&frame_out);
+    } else {
+        // then run skymap handler
+        _frame_handler_controller_rc(frame);
     }
 }
 
-static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
+static void IRAM_ATTR _frame_handler_controller_rc(crsf_frame_t *frame) {
     crsf_payload_rc_channels_t rc;
     if (crsf_payload__rc_channels_unpack(frame, &rc)) {
-        // enable skymap based on the engage channel
-        uint8_t engage_channel = mim_settings_get()->engage_channel;
-        uint16_t engage_value = crsf_payload__rc_channels_get(&rc, engage_channel);
-        mim_skymap_guidance_enable(engage_value > CRSF_RC_CHANNELS_CENTER);
+        // save channel values
+        mim_rc_set_crsf_channels(&rc);
 
-#ifdef CONFIG_CRSF_MIM_CHANNELS_RESPONSE
-        uint16_t channels[4] = { rc.ch1, rc.ch2, rc.ch3, rc.ch4 };
-        mim_rc_set_4_channels(channels, 4);
-#endif
+        // enable skymap based on the engage channel value
+        mim_rc_channel_t engage_channel = mim_settings_get()->engage_channel;
+        bool is_engaging = (engage_channel < MIM_RC_CHANNEL__MAX) &&
+            (mim_rc_get_channel(engage_channel) > CRSF_RC_CHANNELS_CENTER);
+
+        mim_skymap_set_engaging(skymap, is_engaging);
 
         // override channels
-        uint16_t roll = mim_rc_apply_override(MIM_RC_CHANNEL_ROLL, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_ROLL));
-        uint16_t pitch = mim_rc_apply_override(MIM_RC_CHANNEL_PITCH, crsf_payload__rc_channels_get(&rc, MIM_RC_CHANNEL_PITCH));
+        uint16_t roll = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_ROLL);
+        uint16_t pitch = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_PITCH);
 
         crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_ROLL, roll);
         crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_PITCH, pitch);
@@ -162,13 +129,11 @@ static void IRAM_ATTR _skymap_handler(crsf_frame_t *frame) {
         static int64_t last_log_time = 0;
         if (esp_timer_get_time() > last_log_time + 1000000) {
             last_log_time = esp_timer_get_time();
-            /*
             ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
                      rc.ch1, rc.ch2,  rc.ch3,  rc.ch4,  rc.ch5,  rc.ch6,  rc.ch7,  rc.ch8, 
                      rc.ch9, rc.ch10, rc.ch11, rc.ch12, rc.ch13, rc.ch14, rc.ch15, rc.ch16);
             ESP_LOGI(TAG, "engage[channel=%u, value=%u], roll: %u, pitch: %u",
-                     engage_channel, engage_value, roll, pitch);
-            */
+                     engage_channel, is_engaging, roll, pitch);
         }
     }
 }

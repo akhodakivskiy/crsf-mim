@@ -54,19 +54,21 @@ typedef struct {
     void *user_ctx;
 } libnet_config_t;
 
+typedef struct libnet_ctx_s *libnet_handle_t;
+
 // Core functions
-esp_err_t libnet_init(const libnet_config_t* config);
-esp_err_t libnet_deinit(void);
+esp_err_t libnet_init(const libnet_config_t* config, libnet_handle_t *handle);
+esp_err_t libnet_deinit(libnet_handle_t handle);
 
 // UDP functions
-esp_err_t libnet_udp_server_start(uint16_t port);
-esp_err_t libnet_udp_server_stop(void);
-esp_err_t libnet_udp_send(const ip4_addr_t *dest_ip, uint16_t dest_port, const uint8_t* data, size_t len);
-esp_err_t libnet_udp_send_broadcast(uint16_t dest_port, const uint8_t* data, size_t len);
+esp_err_t libnet_udp_server_start(libnet_handle_t handle, uint16_t port);
+esp_err_t libnet_udp_server_stop(libnet_handle_t handle);
+esp_err_t libnet_udp_send(libnet_handle_t handle, const ip4_addr_t *dest_ip, uint16_t dest_port, const uint8_t* data, size_t len);
+esp_err_t libnet_udp_send_broadcast(libnet_handle_t handle, uint16_t dest_port, const uint8_t* data, size_t len);
 
 // Utility functions
-bool libnet_is_connected(void);
-void libnet_get_ip_address(ip4_addr_t *addr);
+bool libnet_is_connected(libnet_handle_t handle);
+void libnet_get_ip_address(libnet_handle_t handle, ip4_addr_t *addr);
 
 #ifdef __cplusplus
 }

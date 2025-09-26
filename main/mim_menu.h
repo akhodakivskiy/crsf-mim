@@ -2,7 +2,7 @@
 #define MIM_MENU_H
 
 #include "libcrsf_device.h"
-#include "skymap.h"
+#include <lwip/ip4_addr.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,7 +10,9 @@ extern "C" {
 
 void mim_menu_init(crsf_device_t *device);
 
-void mim_menu_set_skymap(skymap_t *sm);
+void mim_menu_set_ip_address(const ip4_addr_t *addr);
+
+void mim_menu_set_connected(bool value);
 
 #ifdef __cplusplus
 }

@@ -1,18 +1,18 @@
 #ifndef MIM_SKYMAP_H
 #define MIM_SKYMAP_H
 
-#include "skymap.h"
+#include <freertos/FreeRTOS.h>
 
-typedef struct {
-    bool is_valid;
-    double roll_cmd;
-    double pitch_cmd;
-} mim_skymap_command_t;
+typedef struct mim_skymap_ctx_s *mim_skymap_handle_t;
 
-void mim_skymap_init(BaseType_t priority);
+esp_err_t mim_skymap_init(BaseType_t priority, mim_skymap_handle_t *handle);
 
-bool mim_skymap_guidance_is_enabled();
+esp_err_t mim_skymap_deinit(mim_skymap_handle_t handle);
 
-void mim_skymap_guidance_enable(bool enable);
+bool mim_skymap_is_ready(const mim_skymap_handle_t handle);
+
+bool mim_skymap_is_engaging(const mim_skymap_handle_t handle);
+
+void mim_skymap_set_engaging(mim_skymap_handle_t handle, bool enable);
 
 #endif

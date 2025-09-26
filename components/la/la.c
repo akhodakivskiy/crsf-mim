@@ -105,3 +105,27 @@ la_float la_vec_unit(const la_float *a, la_float *b, int size) {
         return 0.0;
     }
 }
+
+void la_vec_rotate_rodrigues(
+    const la_float *v, 
+    const la_float *k, 
+    la_float theta_rad, 
+    la_float *out) {
+
+    la_zero(out, 3);
+    la_float theta_cos = la_cos(theta_rad);
+
+    // v * cos(theta)
+    la_float t[3] = {0};
+    la_scale(v, theta_cos, t, 3);
+    la_add(out, t, out, 3);
+
+    // (k x v) * sin(theta)
+    la_vec_cross_3(k, v, t);
+    la_scale(t, la_sin(theta_rad), t, 3);
+    la_add(out, t, out, 3);
+
+    // k * (k . v) * (1 - cos(theta))
+    la_scale(k, la_vec_dot(k, v, 3) * (1 - theta_cos), t, 3);
+    la_add(out, t, out, 3);
+}

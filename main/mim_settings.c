@@ -1,5 +1,6 @@
 #include "mim_settings.h"
 #include "esp_err.h"
+#include "mim_rc.h"
 #include "sdkconfig.h"
 
 #define SETTINGS_NAMESPACE "mim_settings"
@@ -20,12 +21,19 @@ static const mim_settings_t mim_settings_default = {
     .wifi_ssid = CONFIG_CRSF_MIM_WIFI_SSID,
     .wifi_password = CONFIG_CRSF_MIM_WIFI_PASSWORD,
     .skymap_udp_port = 8888,
-    .engage_channel = 16,
-    .guidance = {
+    .engage_channel = MIM_RC_CHANNEL_16,
+    .nav = {
         .N = 3,
         .max_roll_deg = 35,
-        .max_pitch_deg = 25,
-        .pitch_invert = true,
+        .attack_angle_deg = 20,
+        .attack_factor = 2,
+    },
+    .pitcher = {
+        .kp = 0.1,
+        .ki = 0.02,
+        .kd = 0.005,
+        .alpha = 0.3,
+        .inverted = true,
     }
 };
 
@@ -112,6 +120,16 @@ const IRAM_ATTR mim_settings_t* mim_settings_get(void) {
     return &mim_settings_current;
 }
 
+esp_err_t mim_settings_reset_to_defaults(void) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    memcpy(&mim_settings_current, &mim_settings_default, sizeof(mim_settings_t));
+    ESP_LOGI(TAG, "Settings reset to defaults");
+    return ESP_OK;
+}
+
 esp_err_t mim_settings_set_mode(mim_settings_mode_t mode) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
@@ -148,7 +166,7 @@ esp_err_t mim_settings_set_skymap_udp_port(uint16_t port) {
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_engage_channel(uint8_t channel) {
+esp_err_t mim_settings_set_engage_channel(mim_rc_channel_t channel) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -161,48 +179,83 @@ esp_err_t mim_settings_set_engage_channel(uint8_t channel) {
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_guidance_N(float N) {
+esp_err_t mim_settings_set_nav_N(float N) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    mim_settings_current.guidance.N = N;
+    mim_settings_current.nav.N = N;
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_guidance_max_roll_deg(uint8_t max_roll_deg) {
+esp_err_t mim_settings_set_nav_max_roll_deg(uint8_t max_roll_deg) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    mim_settings_current.guidance.max_roll_deg = max_roll_deg;
+    mim_settings_current.nav.max_roll_deg = max_roll_deg;
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_guidance_max_pitch_deg(uint8_t max_pitch_deg) {
+esp_err_t mim_settings_set_nav_attack_angle_deg(uint8_t angle) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    mim_settings_current.guidance.max_pitch_deg = max_pitch_deg;
+    mim_settings_current.nav.attack_angle_deg = angle;
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_guidance_pitch_invert(bool invert) {
+esp_err_t mim_settings_set_nav_attack_factor(float factor) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    mim_settings_current.guidance.pitch_invert = invert;
+    mim_settings_current.nav.attack_factor = factor;
     return ESP_OK;
 }
 
-esp_err_t mim_settings_reset_to_defaults(void) {
+esp_err_t mim_settings_set_nav_pitcher_p_gain(float gain) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    memcpy(&mim_settings_current, &mim_settings_default, sizeof(mim_settings_t));
-    ESP_LOGI(TAG, "Settings reset to defaults");
+    mim_settings_current.pitcher.kp = gain;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_i_gain(float gain) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.ki = gain;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_d_gain(float gain) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.kd = gain;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_alpha(float alpha) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.alpha = alpha;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_inverted(bool inverted) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.inverted = inverted;
     return ESP_OK;
 }

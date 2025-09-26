@@ -1,0 +1,16 @@
+menu "CRSF-MIM-TEST"
+    config CRSF_MIM_TEST_WIFI_SSID
+        string "WiFi SSID"
+        default "ASUS"
+        help
+            WiFi SSID for Wifi Mode
+    config CRSF_MIM_TEST_WIFI_PASSWORD
+        string "WiFi Password"
+        default "0503521228"
+        help
+            WiFi Password for WiFi Mode
+    config CRSF_MIM_TEST_NETIF_REPEATS
+        int "Netif test repeats"
+        default 0
+        help "Number of time to init and deinit network interfaces"
+endmenu

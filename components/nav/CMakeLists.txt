@@ -1,5 +1,6 @@
 idf_component_register(
     SRCS 
-        "nav_guidance.c"
+        "nav.c"
+        "nav_pitcher.c"
     INCLUDE_DIRS "."
     REQUIRES la)

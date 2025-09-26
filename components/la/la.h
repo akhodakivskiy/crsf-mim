@@ -13,18 +13,24 @@ typedef double la_float;
 #define la_abs fabs
 #define la_sqrt sqrt
 #define la_atan2 atan2
+#define la_acos acos
 #define la_cos cos
+#define la_tan tan
 #define la_sin sin
 #define la_asin asin
+#define la_pow pow
 #else
 typedef float la_float;
 #define LA_EPSILON FLT_EPSILON
 #define la_abs fabsf
 #define la_sqrt sqrtf
 #define la_atan2 atan2f
+#define la_acos acosf
 #define la_cos cosf
+#define la_tan tanf
 #define la_sin sinf
 #define la_asin asinf
+#define la_pow powf
 #endif
 //typedef double la_float;
 //#define LA_EPSILON DBL_EPSILON
@@ -60,5 +66,11 @@ la_float la_vec_dot(const la_float *a, const la_float *b, int size);
 la_float la_vec_norm(const la_float *a, int size);
 
 la_float la_vec_unit(const la_float *a, la_float *b, int size);
+
+void la_vec_rotate_rodrigues(
+    const la_float *v, 
+    const la_float *k, 
+    la_float theta_rad, 
+    la_float *out);
 
 #endif
