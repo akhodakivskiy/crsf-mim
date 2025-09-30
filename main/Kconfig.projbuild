@@ -11,6 +11,20 @@ menu "CRSF-MIM"
             help
                 Receiver firmware
     endchoice
+    config CRSF_MIM_PIN_CONTROLLER
+        int "Controller GPIO pin"
+        default 45
+        help
+            "GPIO pin number connected to the Controller"
+    config CRSF_MIM_PIN_MODULE
+        int "Module GPIO pin"
+        default 46
+        help
+            "GPIO pin number connected to the TX Module"
+    config CRSF_MIM_SKYMAP_UDP_PORT
+        int "UDP port for Skymap"
+        help
+            "UDP Port on which Skymap will send TATEP traffic"
     config CRSF_MIM_WIFI_SSID
         string "WiFi SSID"
         help

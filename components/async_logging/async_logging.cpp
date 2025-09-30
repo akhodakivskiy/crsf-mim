@@ -66,6 +66,15 @@ void async_logging_init(BaseType_t priority, BaseType_t core_id) {
 #endif
 }
 
+void async_logging_flush() {
+#if CONFIG_ASYNC_LOGGING_ENABLED == 1
+    assert(_logging_init);
+    while (xRingbufferGetCurFreeSize(_buffer) < CONFIG_ASYNC_LOGGING_BUFFER_LEN) {
+        vTaskDelay(1);
+    }
+#endif
+}
+
 void async_logging_deinit() {
 #if CONFIG_ASYNC_LOGGING_ENABLED == 1
     assert(_logging_init);

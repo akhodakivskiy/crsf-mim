@@ -30,8 +30,10 @@ static const mim_settings_t mim_settings_default = {
     },
     .pitcher = {
         .kp = 0.1,
-        .ki = 0.02,
         .kd = 0.005,
+        .ki = 0.02,
+        .max_rate = 0.5,
+        .integral_limit = 0.5,
         .alpha = 0.3,
         .inverted = true,
     }
@@ -239,6 +241,24 @@ esp_err_t mim_settings_set_nav_pitcher_d_gain(float gain) {
     }
 
     mim_settings_current.pitcher.kd = gain;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_max_rate(float max_rate) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.max_rate = max_rate;
+    return ESP_OK;
+}
+
+esp_err_t mim_settings_set_nav_pitcher_integral_limit(float limit) {
+    if (!mim_settings_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mim_settings_current.pitcher.integral_limit = limit;
     return ESP_OK;
 }
 

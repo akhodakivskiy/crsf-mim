@@ -6,13 +6,16 @@
 #include "libcrsf_device_param.h"
 
 #include "mim_rc.h"
+#include "mim_nav.h"
+#include "nav.h"
 
 #include <stdint.h>
 #include <esp_log.h>
 #include <string.h>
 #include <esp_netif_ip_addr.h>
 
-#define MIM_CRSF_DEVICE_SERIAL 0x04423448
+#define _MIM_CRSF_DEVICE_SERIAL 0x04423448
+#define _MIM_CRSF_MAX_PARAM_COMMAND_INFO_LENGTH CRSF_MAX_PAYLOAD_LEN - 2
 
 typedef enum {
     _MIM_MENU_TEST_RC_IDLE,
@@ -26,7 +29,10 @@ typedef enum {
 
 static const char *TAG = "MENU";
 
+static mim_nav_handle_t _mim_menu_nav = NULL;
+
 static _mim_menu_test_rc_state_t _test_rc_state = _MIM_MENU_TEST_RC_IDLE;
+static bool _mim_menu_is_tracking = false;
 
 static ip4_addr_t _mim_menu_ip_address = { .addr = 0 };
 static char _mim_menu_ip_address_str[16];
@@ -220,6 +226,34 @@ void _param_float_nav_pitcher_d_gain_set(const crsf_device_param_write_value_t *
     mim_settings_save();
 }
 
+void _param_float_nav_pitcher_max_rate_get(crsf_device_param_read_value_t *value) {
+    value->flt.value = mim_settings_get()->pitcher.max_rate * 100;
+    value->flt.value_min = 0;
+    value->flt.value_max = 100;
+    value->flt.decimal_places = 2;
+    value->flt.step = 1;
+    value->flt.units = "";
+}
+
+void _param_float_nav_pitcher_max_rate_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_nav_pitcher_max_rate(((float)value->flt) / 100.0);
+    mim_settings_save();
+}
+
+void _param_float_nav_pitcher_integral_limit_get(crsf_device_param_read_value_t *value) {
+    value->flt.value = mim_settings_get()->pitcher.integral_limit * 100;
+    value->flt.value_min = 0;
+    value->flt.value_max = 100;
+    value->flt.decimal_places = 2;
+    value->flt.step = 1;
+    value->flt.units = "";
+}
+
+void _param_float_nav_pitcher_integral_limit_set(const crsf_device_param_write_value_t *value) {
+    mim_settings_set_nav_pitcher_integral_limit(((float)value->flt) / 100.0);
+    mim_settings_save();
+}
+
 void _param_float_nav_pitcher_alpha_get(crsf_device_param_read_value_t *value) {
     value->flt.value = mim_settings_get()->pitcher.alpha * 100;
     value->flt.value_min = 0;
@@ -291,6 +325,7 @@ void _param_command_test_rc_get(crsf_device_param_read_value_t *value) {
 void _param_command_test_rc_set(const crsf_device_param_write_value_t *value) {
     switch (value->command_action) {
         case CRSF_COMMAND_STATE_START:
+            ESP_LOGI(TAG, "test rc start");
             _test_rc_state = _MIM_MENU_TEST_RC_START;
             break;
         case CRSF_COMMAND_STATE_POLL:
@@ -318,25 +353,73 @@ void _param_command_test_rc_set(const crsf_device_param_write_value_t *value) {
                 default:
                     break;
             }
+            break;
+        case CRSF_COMMAND_STATE_CANCEL:
+            ESP_LOGI(TAG, "test rc cancelling");
+            _test_rc_state = _MIM_MENU_TEST_RC_IDLE;
+            break;
         default:
             break;
     }
 }
 
-void mim_menu_init(crsf_device_t *device) {
-    crsf_device_init(device, CRSF_ADDRESS_CRSF_MIM, "crsf-mim", MIM_CRSF_DEVICE_SERIAL);
+char _mim_tracker[_MIM_CRSF_MAX_PARAM_COMMAND_INFO_LENGTH];
 
-    crsf_device_param_t *guidance = crsf_device_add_param(device, "guidance", CRSF_PARAM_TYPE_FOLDER, NULL, 
+void _param_command_track_get(crsf_device_param_read_value_t *value) {
+    if (_mim_menu_is_tracking) {
+        if (mim_nav_is_engaging(_mim_menu_nav)) {
+            const nav_command_t *cmd = mim_nav_get_last_command(_mim_menu_nav);
+            const char *type_str = (cmd->type == NAV_PRONAV) ? "pn" : ((cmd->type == NAV_PURSUIT) ? "pur" : "none");
+            snprintf(_mim_tracker, _MIM_CRSF_MAX_PARAM_COMMAND_INFO_LENGTH, 
+                     "[%s] r%.0f\x1E"
+                     "ah%.1f av%.1f\x1E"
+                     "tgo%.0f 0em%.0f ",
+                     type_str, cmd->range, cmd->accel_lat, cmd->accel_ver, cmd->time_to_go_s, cmd->zero_effort_miss_m);
+        } else {
+            snprintf(_mim_tracker, 40, "tg%s, ic%s", 
+                mim_nav_is_target_ready(_mim_menu_nav) ? "+" : "-",
+                mim_nav_is_interceptor_ready(_mim_menu_nav) ? "+" : "-");
+        }
+        value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+        value->command.status = _mim_tracker;
+        value->command.timeout = 20;
+    } else {
+        value->command.state = CRSF_COMMAND_STATE_READY;
+        value->command.status = "";
+        value->command.timeout = 1;
+    }
+}
+
+void _param_command_track_set(const crsf_device_param_write_value_t *value) {
+    switch (value->command_action) {
+        case CRSF_COMMAND_STATE_START:
+            _mim_menu_is_tracking = true;
+        case CRSF_COMMAND_STATE_POLL:
+            break;
+        case CRSF_COMMAND_STATE_CANCEL:
+            _mim_menu_is_tracking = false;
+            break;
+        default:
+            break;
+    }
+}
+
+void mim_menu_init(crsf_device_t *device, mim_nav_handle_t nav) {
+    _mim_menu_nav = nav;
+
+    crsf_device_init(device, CRSF_ADDRESS_CRSF_MIM, "crsf-mim", _MIM_CRSF_DEVICE_SERIAL);
+
+    crsf_device_param_t *config = crsf_device_add_param(device, "config", CRSF_PARAM_TYPE_FOLDER, NULL, 
                           _param_folder_guidance_get, NULL);
 
-    crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, guidance, 
+    crsf_device_add_param(device, "N factor", CRSF_PARAM_TYPE_FLOAT, config, 
                           _param_float_nav_N_get, 
                           _param_float_nav_N_set);
-    crsf_device_add_param(device, "max roll", CRSF_PARAM_TYPE_UINT8, guidance, 
+    crsf_device_add_param(device, "max roll", CRSF_PARAM_TYPE_UINT8, config, 
                           _param_u8_nav_max_roll_deg_get, 
                           _param_u8_nav_max_roll_deg_set);
 
-    crsf_device_param_t *guidance_attack = crsf_device_add_param(device, "attack angle", CRSF_PARAM_TYPE_FOLDER, guidance,
+    crsf_device_param_t *guidance_attack = crsf_device_add_param(device, "attack angle", CRSF_PARAM_TYPE_FOLDER, config,
                           _param_folder_nav_attack_get, NULL);
 
     crsf_device_add_param(device, "angle", CRSF_PARAM_TYPE_UINT8, guidance_attack, 
@@ -346,21 +429,24 @@ void mim_menu_init(crsf_device_t *device) {
                           _param_float_nav_attack_factor_get, 
                           _param_float_nav_attack_factor_set);
 
-    crsf_device_param_t *guidance_pitcher = crsf_device_add_param(device, "pitch", CRSF_PARAM_TYPE_FOLDER, guidance,
+    crsf_device_param_t *guidance_pitcher = crsf_device_add_param(device, "pitch", CRSF_PARAM_TYPE_FOLDER, config,
                           _param_folder_nav_pitcher_get, NULL);
 
     crsf_device_add_param(device, "P gain", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
                           _param_float_nav_pitcher_p_gain_get, 
                           _param_float_nav_pitcher_p_gain_set);
-
     crsf_device_add_param(device, "I gain", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
                           _param_float_nav_pitcher_i_gain_get, 
                           _param_float_nav_pitcher_i_gain_set);
-
     crsf_device_add_param(device, "D gain", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
                           _param_float_nav_pitcher_d_gain_get, 
                           _param_float_nav_pitcher_d_gain_set);
-
+    crsf_device_add_param(device, "max rate", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
+                          _param_float_nav_pitcher_max_rate_get, 
+                          _param_float_nav_pitcher_max_rate_set);
+    crsf_device_add_param(device, "integral_limit", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
+                          _param_float_nav_pitcher_integral_limit_get, 
+                          _param_float_nav_pitcher_integral_limit_set);
     crsf_device_add_param(device, "alpha", CRSF_PARAM_TYPE_FLOAT, guidance_pitcher, 
                           _param_float_nav_pitcher_alpha_get, 
                           _param_float_nav_pitcher_alpha_set);
@@ -372,6 +458,10 @@ void mim_menu_init(crsf_device_t *device) {
     crsf_device_add_param(device, "test RC", CRSF_PARAM_TYPE_COMMAND, NULL,
                           _param_command_test_rc_get,
                           _param_command_test_rc_set);
+
+    crsf_device_add_param(device, "track", CRSF_PARAM_TYPE_COMMAND, NULL,
+                          _param_command_track_get,
+                          _param_command_track_set);
 
     crsf_device_add_param(device, "mode", CRSF_PARAM_TYPE_SELECT, NULL, 
                           _param_select_mode_get, 

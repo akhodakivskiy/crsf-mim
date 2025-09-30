@@ -19,6 +19,7 @@ typedef enum : uint8_t {
     CRSF_PAYLOAD_LENGTH_RC_CHANNELS = 24,
     CRSF_PAYLOAD_LENGTH_GPS = 17,
     CRSF_PAYLOAD_LENGTH_VARIO = 4,
+    CRSF_PAYLOAD_LENGTH_AIRSPEED = 4,
     CRSF_PAYLOAD_LENGTH_BARO_ALTITUDE = 5,
 } crsf_payload_length_t;
 
@@ -90,9 +91,9 @@ typedef struct {
 } crsf_payload_timing_correction_t;
 
 typedef struct {
-    int32_t latitude;
-    int32_t longitude;
-    uint16_t groundspeed_kmh;
+    int32_t latitude_10e7;
+    int32_t longitude_10e7;
+    uint16_t groundspeed_10kmh;
     uint16_t heading_cdeg;
     uint16_t altitude_m;
     uint8_t satellites;
@@ -106,6 +107,10 @@ typedef struct {
 typedef struct {
     int16_t vspeed_cms;
 } crsf_payload_vario_t;
+
+typedef struct {
+    uint16_t airspeed_100ms;
+} crsf_payload_airspeed_t;
 
 bool crsf_payload__rc_channels_unpack(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload);
 void crsf_payload__rc_channels_pack(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload);
@@ -122,6 +127,7 @@ bool crsf_payload_unpack__timing_correction(const crsf_frame_t *frame, crsf_payl
 bool crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *payload);
 bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload);
 bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload);
+bool crsf_payload_unpack__airspeed(const crsf_frame_t *frame, crsf_payload_airspeed_t *payload);
 
 // Pack payload structure into CRSF frame
 void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload);

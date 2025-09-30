@@ -3,6 +3,10 @@
 
 #include "la.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define NAV_PITCHER_CONFIG_DEFAULT() \
 { \
     .kp = 0.1, \
@@ -39,5 +43,9 @@ la_float nav_pitcher_update(const nav_pitcher_config_t *cfg,
                             la_float a_cmd);
 
 #define nav_pitcher_reset nav_pitcher_init
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

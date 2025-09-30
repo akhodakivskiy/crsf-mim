@@ -5,6 +5,10 @@
 #include <lwip/ip4_addr.h>
 #include <skymap.pb.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     SKYMAP_OK,
     SKYMAP_ERR_HEADER_MISSING,
@@ -19,5 +23,9 @@ skymap_err_t skymap_read_server_message(
 skymap_err_t skymap_write_client_message(
     const ai_skyfortress_guidance_ClientMessage *sm, 
     uint8_t *data, uint16_t len, uint16_t *len_written);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

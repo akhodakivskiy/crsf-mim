@@ -98,7 +98,7 @@ la_float la_vec_norm(const la_float *a, int size) {
 
 la_float la_vec_unit(const la_float *a, la_float *b, int size) {
     la_float norm = la_vec_norm(a, size);
-    if (la_abs(norm) > LA_EPSILON) {
+    if (norm > LA_EPSILON) {
         la_scale(a, 1.0 / norm, b, size);
         return norm;
     } else {

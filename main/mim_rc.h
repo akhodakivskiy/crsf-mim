@@ -6,6 +6,10 @@
 
 #include "libcrsf_payload.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     MIM_RC_OVERRIDE_LEVEL_NONE,
     MIM_RC_OVERRIDE_LEVEL_GUIDANCE,
@@ -41,5 +45,9 @@ void mim_rc_set_override(mim_rc_channel_t channel, uint16_t value, mim_rc_overri
 
 uint16_t mim_rc_get_channel(mim_rc_channel_t channel);
 uint16_t mim_rc_get_channel_with_override(mim_rc_channel_t channel);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

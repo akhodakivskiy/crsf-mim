@@ -17,6 +17,10 @@
     .attack_factor = 1, \
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     float N;
     float max_roll_deg;
@@ -32,6 +36,7 @@ typedef enum {
 
 typedef struct {
     nav_type_t type;
+    la_float range;
     la_float accel_lon;
     la_float accel_lat;
     la_float accel_ver;
@@ -113,5 +118,9 @@ void nav_compute_command(
     const nav_state_t *state_i, 
     const nav_state_t *state_t,
     nav_command_t *command);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

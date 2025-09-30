@@ -1,6 +1,10 @@
 #include "nav_pitcher.h"
 #include "la.h"
 
+#include <esp_log.h>
+
+static const char *TAG = "NAV_PITCHER";
+
 void nav_pitcher_init(nav_pitcher_state_t *state) {
     state->prev_vel_ms = 0;
     state->a_cmd_filtered = 0;

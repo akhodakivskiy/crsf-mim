@@ -24,11 +24,9 @@ bool nav_pursuit(la_float N,
     la_float r_lat_unit[3];
     la_float r_lat_norm = la_vec_unit(r_lat, r_lat_unit, 3);
 
-    if (r_lat_norm < LA_EPSILON) {
+    if (r_lat_norm == 0.0f) {
         return false;
-    }
-
-    if (r_lat_norm > LA_EPSILON) {
+    } else {
         la_float angular_error = la_asin(la_clamp2(r_lat_norm, 1.0));
 
         la_float accel_norm = N * ctx->vel_i_norm * angular_error / NAV_G;
@@ -43,6 +41,11 @@ bool nav_pronav(la_float N,
                          const nav_ctx_t *ctx,
                          la_float *accel) {
     la_zero(accel, 3);
+
+    if (ctx->vel_i_norm < 1) {
+        ESP_LOGW(TAG, "low speed");
+        return false;
+    }
 
     // LOS angular speed
     la_float omega[3];
@@ -80,7 +83,7 @@ bool nav_compute_tail_bias(
     la_vec_cross_3(ctx->range_unit, ctx->vel_t_unit, rot_unit);
     la_float rot_unit_norm = la_vec_unit(rot_unit, rot_unit, 3);
 
-    if (rot_unit_norm < LA_EPSILON) {
+    if (rot_unit_norm == 0.0f) {
         return false;
     }
 
@@ -133,11 +136,11 @@ bool nav_compute_tgo_zem(
 
     bool result = false;
 
-    if (ctx->range_norm < 1 || 
-        ctx->vel_rel_norm < LA_EPSILON || 
+    if (la_abs(ctx->range_norm) < 1 || 
+        ctx->vel_rel_norm == 0.0f || 
         ctx->vel_closing < 0.0) {
         *tgo = 0.0;
-    } else if (ctx->vel_closing < LA_EPSILON) {
+    } else if (ctx->vel_closing == 0.0f) {
         *tgo = la_vec_dot(ctx->range, ctx->vel_rel, 3) / la_pow(ctx->vel_rel_norm, 2);
     } else {
         *tgo = ctx->range_norm / ctx->vel_closing;
@@ -222,15 +225,9 @@ void nav_compute_command(
     nav_state_to_ctx(state_i, state_t, &ctx);
 
     if (ctx.range_norm < 1) {
-        ESP_LOGW(TAG, "NAV: low range");
+        ESP_LOGW(TAG, "low range");
         return;
     }
-
-    if (ctx.vel_i_norm < 1) {
-        ESP_LOGW(TAG, "NAV: low speed");
-        return;
-    }
-
 
     // compute commanded acceleration
     la_float accel[3];
@@ -245,11 +242,13 @@ void nav_compute_command(
 
     la_vec_cross_3(unit_down, unit_lon, unit_lat);
     la_float unit_lat_norm = la_vec_unit(unit_lat, unit_lat, 3);
-    if (unit_lat_norm < LA_EPSILON) {
-        return;
+    if (unit_lat_norm == 0.0f) {
+        ESP_LOGW(TAG, "low lat acc");
+        //return;
     }
 
     command->type = type;
+    command->range = ctx.range_norm;
     command->accel_lon = la_vec_dot(accel, unit_lon, 3), 
     command->accel_lat = la_vec_dot(accel, unit_lat, 3), 
     command->accel_ver = -la_vec_dot(accel, unit_down, 3);

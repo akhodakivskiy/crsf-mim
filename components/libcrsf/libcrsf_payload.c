@@ -178,9 +178,9 @@ bool IRAM_ATTR crsf_payload_unpack__timing_correction(const crsf_frame_t *frame,
 
 bool IRAM_ATTR crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_GPS && frame->length == CRSF_PAYLOAD_LENGTH_GPS) {
-        payload->latitude = (int32_t)be32toh(*(int32_t *)(frame->data + 0));
-        payload->longitude = (int32_t)be32toh(*(int32_t *)(frame->data + 4));
-        payload->groundspeed_kmh = be16toh(*(uint16_t *)(frame->data + 8));
+        payload->latitude_10e7 = (int32_t)be32toh(*(int32_t *)(frame->data + 0));
+        payload->longitude_10e7 = (int32_t)be32toh(*(int32_t *)(frame->data + 4));
+        payload->groundspeed_10kmh = be16toh(*(uint16_t *)(frame->data + 8));
         payload->heading_cdeg = be16toh(*(uint16_t *)(frame->data + 10));
         payload->altitude_m = be16toh(*(uint16_t *)(frame->data + 12)) - 1000;
         payload->satellites = *(uint8_t *)(frame->data + 14);
@@ -195,7 +195,6 @@ const int _CRSF_ALT_BARO_K_L = 100;
 
 bool IRAM_ATTR crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_BARO_ALTITUDE && frame->length == CRSF_PAYLOAD_LENGTH_BARO_ALTITUDE) {
-        ESP_LOG_BUFFER_HEX(TAG, frame->data, 2);
         uint8_t alt_packed_0 = frame->data[0];
         uint8_t alt_packed_1 = frame->data[1];
         payload->altitude_dm = (alt_packed_0 & 0x80) ? 
@@ -203,7 +202,7 @@ bool IRAM_ATTR crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crs
             ((alt_packed_0 << 8) + alt_packed_1 - 10000);
 
         int8_t vspd_packed = *(int8_t *)(frame->data + 2);
-        payload->vertical_speed_cm_s = exp(fabs(vspd_packed * _CRSF_ALT_BARO_K_R) - 1) * 
+        payload->vertical_speed_cm_s = expf(fabs(vspd_packed * _CRSF_ALT_BARO_K_R) - 1) * 
             _CRSF_ALT_BARO_K_L * (vspd_packed > 0 ? 1 : -1);
 
         return true;
@@ -214,6 +213,15 @@ bool IRAM_ATTR crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crs
 bool IRAM_ATTR crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload) {
     if (frame->type == CRSF_FRAME_TYPE_VARIO && frame->length == CRSF_PAYLOAD_LENGTH_VARIO) {
         payload->vspeed_cms = (int16_t)be16toh(*(uint16_t *)frame->data);
+        return true;
+    }
+
+    return false;
+}
+
+bool IRAM_ATTR crsf_payload_unpack__airspeed(const crsf_frame_t *frame, crsf_payload_airspeed_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_AIRSPEED && frame->length == CRSF_PAYLOAD_LENGTH_AIRSPEED) {
+        payload->airspeed_100ms = be16toh(*(uint16_t *)frame->data);
         return true;
     }
 

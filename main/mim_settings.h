@@ -1,3 +1,6 @@
+#ifndef MIM_SETTINGS_H
+#define MIM_SETTINGS_H
+
 #include <esp_err.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -57,10 +60,16 @@ esp_err_t mim_settings_set_nav_pitcher_i_gain(float gain);
 
 esp_err_t mim_settings_set_nav_pitcher_d_gain(float gain);
 
+esp_err_t mim_settings_set_nav_pitcher_max_rate(float max_rate);
+
+esp_err_t mim_settings_set_nav_pitcher_integral_limit(float limit);
+
 esp_err_t mim_settings_set_nav_pitcher_alpha(float alpha);
 
 esp_err_t mim_settings_set_nav_pitcher_inverted(bool inverted);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

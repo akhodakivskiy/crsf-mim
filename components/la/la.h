@@ -36,6 +36,10 @@ typedef float la_float;
 //#define LA_EPSILON DBL_EPSILON
 //#define la_fabs fabs
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 la_float la_clamp(la_float x, la_float min, la_float max);
 la_float la_clamp2(la_float x, la_float max);
 
@@ -72,5 +76,9 @@ void la_vec_rotate_rodrigues(
     const la_float *k, 
     la_float theta_rad, 
     la_float *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
