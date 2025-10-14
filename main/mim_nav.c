@@ -5,12 +5,12 @@
 #include "mim_menu.h"
 #include "mim_rc.h"
 #include "libnet.h"
+#include "portmacro.h"
 #include "skymap.h"
 #include "mim_settings.h"
 #include "nav.h"
 #include "nav_pitcher.h"
 
-#include <lwip/ip4_addr.h>
 #include <esp_netif_ip_addr.h>
 #include <esp_timer.h>
 #include <esp_log.h>
@@ -27,6 +27,7 @@ static const char *TAG = "MIM_NAV";
 struct mim_nav_ctx_s {
     libnet_handle_t libnet;
 
+    ip4_addr_t addr;
     ip4_addr_t skymap_addr;
     uint16_t skymap_port;
 
@@ -52,7 +53,7 @@ struct mim_nav_ctx_s {
 static bool _is_nav_state_ready(int64_t timestamp_us, const nav_state_t *state);
 mim_nav_status_t _get_status(int64_t timestamp_us, const mim_nav_handle_t h);
 
-static void _libnet_init(mim_nav_handle_t handle);
+static void _libnet_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t handle);
 static void _task_skymap_impl(void *arg);
 
 static void _on_connected(void *user_ctx, ip4_addr_t *addr);
@@ -69,18 +70,18 @@ static void _nav_update(int64_t timestamp_us, mim_nav_handle_t h);
 
 TaskHandle_t _task_skymap = NULL;
 
-esp_err_t mim_nav_init(BaseType_t priority, mim_nav_handle_t *handle) {
+esp_err_t mim_nav_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t *handle) {
     mim_nav_handle_t h = (mim_nav_handle_t) heap_caps_calloc(1, sizeof(struct mim_nav_ctx_s), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
     memset(h, 0, sizeof(struct mim_nav_ctx_s));
 
     assert(_task_skymap == NULL);
 
+    ip4_addr_set_any(&h->addr);
     ip4_addr_set_any(&h->skymap_addr);
     h->skymap_port = 0;
     h->queue = xQueueCreate(_MIM_NAV_QUEUE_SIZE, sizeof(mim_nav_msg_t));
 
-    _libnet_init(h);
-    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, h, priority, &h->task, APP_CPU_NUM) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_skymap_impl, "skymap", 4096, h, priority, &h->task, core) == pdPASS);
 
     h->is_initialized = true;
 
@@ -108,23 +109,48 @@ esp_err_t mim_nav_deinit(mim_nav_handle_t h) {
     return ESP_OK;
 }
 
+ip4_addr_t mim_nav_get_ip_address(const mim_nav_handle_t handle) {
+    return handle->addr;
+}
+
+ip4_addr_t mim_nav_get_skymap_ip_address(const mim_nav_handle_t handle) {
+    return handle->skymap_addr;
+}
+
 void mim_nav_enqueue(mim_nav_handle_t handle, const mim_nav_msg_t *msg) {
     assert(xQueueSend(handle->queue, msg, 0) == pdTRUE);
 }
 
-mim_nav_status_t mim_nav_get_status(const mim_nav_handle_t h) {
-    int64_t time = esp_timer_get_time();
-    return _get_status(time, h);
+mim_nav_estimate_status_t mim_nav_target_status(const mim_nav_handle_t h) {
+    if (_is_nav_state_ready(esp_timer_get_time(), &h->state_target)) {
+        return MIM_NAV_ESTIMATE_STATUS_SKYMAP;
+    } else {
+        return MIM_NAV_ESTIMATE_STATUS_NONE;
+    }
 }
 
-bool mim_nav_is_target_ready(const mim_nav_handle_t h) {
-    return _is_nav_state_ready(esp_timer_get_time(), &h->state_target);
+mim_nav_estimate_status_t mim_nav_interceptor_status(const mim_nav_handle_t h) {
+    if (_is_nav_state_ready(esp_timer_get_time(), &h->state_interceptor)) {
+        return MIM_NAV_ESTIMATE_STATUS_SKYMAP;
+    } else if (_is_nav_state_ready(esp_timer_get_time(), &h->state_interceptor_crsf)) {
+        return MIM_NAV_ESTIMATE_STATUS_CRSF;
+    } else {
+        return MIM_NAV_ESTIMATE_STATUS_NONE;
+    }
 }
 
-bool mim_nav_is_interceptor_ready(const mim_nav_handle_t h) {
-    return _is_nav_state_ready(esp_timer_get_time(), &h->state_interceptor) ||
-           _is_nav_state_ready(esp_timer_get_time(), &h->state_interceptor_crsf);
+const nav_state_t *mim_nav_get_interceptor(const mim_nav_handle_t h) {
+    if (_is_nav_state_ready(esp_timer_get_time(), &h->state_interceptor)) {
+        return &h->state_interceptor;
+    } else {
+        return &h->state_interceptor_crsf;
+    }
 }
+
+const nav_state_t *mim_nav_get_target(const mim_nav_handle_t h) {
+    return &h->state_target;
+}
+
 
 bool mim_nav_is_engaging(const mim_nav_handle_t handle) {
     return handle->is_engaging;
@@ -156,11 +182,11 @@ const nav_command_t *mim_nav_get_last_command(mim_nav_handle_t handle) {
     return &handle->command;
 }
 
-static void _libnet_init(mim_nav_handle_t h) {
+static void _libnet_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t h) {
     libnet_config_t libnet_cfg = {0};
 
-    libnet_cfg.priority = uxTaskPriorityGet(xTaskGetCurrentTaskHandle());
-    libnet_cfg.core_id = PRO_CPU_NUM;
+    libnet_cfg.priority = priority;
+    libnet_cfg.core_id = core;
     libnet_cfg.callbacks.connected = _on_connected;
     libnet_cfg.callbacks.disconnected = _on_disconnected;
     libnet_cfg.callbacks.packet = _on_packet;
@@ -183,6 +209,11 @@ static void _libnet_init(mim_nav_handle_t h) {
 
 static IRAM_ATTR void _task_skymap_impl(void *arg) {
     mim_nav_handle_t h = (mim_nav_handle_t)arg;
+
+    _libnet_init(
+        xTaskGetCoreID(NULL),
+        uxTaskPriorityGet(xTaskGetCurrentTaskHandle()), 
+        h);
 
     uint32_t notification_value;
     mim_nav_msg_t msg;
@@ -224,9 +255,7 @@ static void _on_connected(void *user_ctx, ip4_addr_t *addr) {
     mim_nav_handle_t h = (mim_nav_handle_t)(user_ctx);
 
     h->is_connected = true;
-
-    mim_menu_set_ip_address(addr);
-    mim_menu_set_connected(true);
+    h->addr = *addr;
 
     ESP_LOGI(TAG, "connected, IP=" IPSTR, IP2STR(addr));
 }
@@ -235,11 +264,8 @@ static void _on_disconnected(void *user_ctx) {
     mim_nav_handle_t h = (mim_nav_handle_t)(user_ctx);
 
     h->is_connected = false;
-
-    ip4_addr_t addr;
-    ip4_addr_set_any(&addr);
-    mim_menu_set_ip_address(&addr);
-    mim_menu_set_connected(false);
+    ip4_addr_set_any(&h->addr);
+    ip4_addr_set_any(&h->skymap_addr);
 
     ESP_LOGI(TAG, "disconnected");
 }
@@ -255,7 +281,7 @@ static IRAM_ATTR void _on_packet(void *user_ctx, uint8_t *data, uint16_t len, ip
     skymap_err_t err = skymap_read_server_message(&msg.message.server, data, len);
 
     if (err == SKYMAP_OK) {
-assert(xQueueSend(h->queue, &msg, 0) == pdTRUE);
+        assert(xQueueSend(h->queue, &msg, 0) == pdTRUE);
         h->skymap_addr = *addr_from;
         h->skymap_port = port_from;
     } else {
@@ -334,6 +360,9 @@ static void _skymap_handle_crsf_message(int64_t timestamp_us, mim_nav_handle_t h
         case MIM_NAV_CRSF_SUBSET_TYPE_VARIO:
             h->state_interceptor_crsf.vel_up = msg->message.vario.vspeed_cms / 100.0f;
             break;
+        case MIM_NAV_CRSF_SUBSET_TYPE_ALT:
+            //h->state_interceptor_crsf.vel_up = msg->message.vario.vspeed_cms / 100.0f;
+            break;
         default:
             break;
     }
@@ -383,7 +412,7 @@ static void _nav_update(int64_t timestamp_us, mim_nav_handle_t h) {
         mim_rc_set_override(MIM_RC_CHANNEL_ROLL, roll_ticks, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
         mim_rc_set_override(MIM_RC_CHANNEL_PITCH, pitch_ticks, MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
     } else {
-        mim_rc_reset_overrides();
+        mim_rc_reset_overrides(MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
     }
 
     h->time_last_update = timestamp_us;

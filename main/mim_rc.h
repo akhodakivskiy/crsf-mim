@@ -11,9 +11,9 @@ extern "C" {
 #endif
 
 typedef enum {
-    MIM_RC_OVERRIDE_LEVEL_NONE,
-    MIM_RC_OVERRIDE_LEVEL_GUIDANCE,
-    MIM_RC_OVERRIDE_LEVEL_TEST,
+    MIM_RC_OVERRIDE_LEVEL_NONE = 0,
+    MIM_RC_OVERRIDE_LEVEL_GUIDANCE = 1,
+    MIM_RC_OVERRIDE_LEVEL_TEST = 2,
 } mim_rc_override_level_t;
 
 typedef enum : uint8_t {
@@ -37,7 +37,7 @@ typedef enum : uint8_t {
 } mim_rc_channel_t;
 
 void mim_rc_reset();
-void mim_rc_reset_overrides();
+void mim_rc_reset_overrides(mim_rc_override_level_t level);
 
 void mim_rc_set_crsf_channels(const crsf_payload_rc_channels_t *channels);
 void mim_rc_set_channel(mim_rc_channel_t channel, uint16_t value);

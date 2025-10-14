@@ -1,12 +1,12 @@
 menu "CRSF-MIM-TEST"
     config CRSF_MIM_TEST_WIFI_SSID
         string "WiFi SSID"
-        default "ASUS"
+        default "m1"
         help
             WiFi SSID for Wifi Mode
     config CRSF_MIM_TEST_WIFI_PASSWORD
         string "WiFi Password"
-        default "0503521228"
+        default "01234567890"
         help
             WiFi Password for WiFi Mode
     config CRSF_MIM_TEST_NETIF_REPEATS

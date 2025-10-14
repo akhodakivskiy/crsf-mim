@@ -3,6 +3,7 @@
 #include "nav.h"
 #include "skymap.pb.h"
 #include "soc/gpio_num.h"
+#include "soc/soc.h"
 #include <sdkconfig.h>
 
 #ifdef CONFIG_CRSF_MIM_FIRMWARE_TX
@@ -57,7 +58,7 @@ crsf_device_t crsf_device;
 mim_nav_handle_t skymap;
 
 void app_main(void) {
-    async_logging_init(PRIORITY_TASK_ASYNC_LOGGING, PRO_CPU_NUM);
+    async_logging_init(APP_CPU_NUM, PRIORITY_TASK_ASYNC_LOGGING);
 
     // init and load settings
     ESP_LOGI(TAG, "initializing and loading settings");
@@ -65,7 +66,7 @@ void app_main(void) {
     mim_settings_load();
 
     ESP_LOGI(TAG, "initializing navigation");
-    ESP_ERROR_CHECK(mim_nav_init(PRIORITY_TASK_SKYMAP, &skymap));
+    ESP_ERROR_CHECK(mim_nav_init(PRO_CPU_NUM, PRIORITY_TASK_SKYMAP, &skymap));
 
     // init CRSF device menu
     ESP_LOGI(TAG, "initializing CRSF");
@@ -76,7 +77,7 @@ void app_main(void) {
     mim_uart_set_controller_handler(_frame_handler_controller);
 
     // init UART tasks and set frame handler
-    mim_uart_init(PRIORITY_TASK_CRSF, 
+    mim_uart_init(APP_CPU_NUM, PRIORITY_TASK_CRSF, 
                   UART_PORT_CONTROLLER, (gpio_num_t)CONFIG_CRSF_MIM_PIN_CONTROLLER, 
                   UART_PORT_MODULE, (gpio_num_t)CONFIG_CRSF_MIM_PIN_MODULE);
 }
@@ -87,12 +88,16 @@ static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
 
     if (crsf_payload_unpack__gps(frame, &msg.message.crsf.message.gps)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_GPS;
+        ESP_LOGI(TAG, "gps");
     } else if (crsf_payload_unpack__baro_altitude(frame, &msg.message.crsf.message.alt)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_ALT;
+        ESP_LOGI(TAG, "alt");
     } else if (crsf_payload_unpack__vario(frame, &msg.message.crsf.message.vario)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_VARIO;
+        ESP_LOGI(TAG, "vario");
     } else if (crsf_payload_unpack__airspeed(frame, &msg.message.crsf.message.airspeed)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_AIRSPEED;
+        ESP_LOGI(TAG, "aspd");
     } else {
         return;
     }
@@ -126,31 +131,29 @@ static void IRAM_ATTR _frame_handler_controller_rc(crsf_frame_t *frame) {
 
         mim_nav_set_engaging(skymap, is_engaging);
 
-        if (is_engaging) {
-            // override channels
-            uint16_t roll = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_ROLL);
-            uint16_t pitch = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_PITCH);
+        // override channels
+        uint16_t roll = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_ROLL);
+        uint16_t pitch = mim_rc_get_channel_with_override(MIM_RC_CHANNEL_PITCH);
 
-            crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_ROLL, roll);
-            crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_PITCH, pitch);
+        crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_ROLL, roll);
+        crsf_payload__rc_channels_set(&rc, MIM_RC_CHANNEL_PITCH, pitch);
 
-            crsf_payload__rc_channels_pack(frame, &rc);
+        crsf_payload__rc_channels_pack(frame, &rc);
 
 
-            static int64_t last_log_time = 0;
-            if (esp_timer_get_time() > last_log_time + 1000000) {
-                last_log_time = esp_timer_get_time();
-                /*
+        static int64_t last_log_time = 0;
+        if (esp_timer_get_time() > last_log_time + 1000000) {
+            last_log_time = esp_timer_get_time();
+            /*
             ESP_LOGI(TAG, "%u %u %u %u %u %u %u %u %u %u %u %u %u %u %u %u",
                      rc.ch1, rc.ch2,  rc.ch3,  rc.ch4,  rc.ch5,  rc.ch6,  rc.ch7,  rc.ch8, 
                      rc.ch9, rc.ch10, rc.ch11, rc.ch12, rc.ch13, rc.ch14, rc.ch15, rc.ch16);
             ESP_LOGI(TAG, "engage[channel=%u, value=%u], roll: %u, pitch: %u",
                      engage_channel, is_engaging, roll, pitch);
-        */
                 const nav_command_t *cmd = mim_nav_get_last_command(skymap);
                 ESP_LOGI(TAG, "type=%u, range=%.2f, ah=%.2f, av=%.2f, roll=%u, pitch=%u", 
                          cmd->type, cmd->range, cmd->accel_lat, cmd->accel_ver, roll, pitch);
-            }
+        */
         }
     }
 }

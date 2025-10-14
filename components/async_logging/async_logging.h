@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-void async_logging_init(BaseType_t priority, BaseType_t core_id);
+void async_logging_init(BaseType_t core_id, UBaseType_t priority);
 void async_logging_flush();
 void async_logging_deinit();
 

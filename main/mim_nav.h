@@ -2,6 +2,7 @@
 #define MIM_NAV_H
 
 #include <freertos/FreeRTOS.h>
+#include <lwip/ip4_addr.h>
 
 #include "libcrsf_payload.h"
 #include "skymap.pb.h"
@@ -17,6 +18,12 @@ typedef enum {
     MIM_NAV_STATUS_ERROR_TARGET_POSITION,
     MIM_NAV_STATUS_ERROR_INTERCEPTOR_POSITION,
 } mim_nav_status_t;
+
+typedef enum {
+    MIM_NAV_ESTIMATE_STATUS_NONE,
+    MIM_NAV_ESTIMATE_STATUS_SKYMAP,
+    MIM_NAV_ESTIMATE_STATUS_CRSF,
+} mim_nav_estimate_status_t;
 
 typedef enum {
     MIM_NAV_CRSF_SUBSET_TYPE_GPS,
@@ -52,15 +59,20 @@ typedef struct {
 
 typedef struct mim_nav_ctx_s *mim_nav_handle_t;
 
-esp_err_t mim_nav_init(BaseType_t priority, mim_nav_handle_t *handle);
+esp_err_t mim_nav_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t *handle);
 
 esp_err_t mim_nav_deinit(mim_nav_handle_t handle);
 
+ip4_addr_t mim_nav_get_ip_address(const mim_nav_handle_t handle);
+ip4_addr_t mim_nav_get_skymap_ip_address(const mim_nav_handle_t handle);
+
 void mim_nav_enqueue(mim_nav_handle_t handle, const mim_nav_msg_t *msg);
 
-mim_nav_status_t mim_nav_get_status(const mim_nav_handle_t handle);
-bool mim_nav_is_target_ready(const mim_nav_handle_t handle);
-bool mim_nav_is_interceptor_ready(const mim_nav_handle_t handle);
+mim_nav_estimate_status_t mim_nav_target_status(const mim_nav_handle_t handle);
+mim_nav_estimate_status_t mim_nav_interceptor_status(const mim_nav_handle_t handle);
+
+const nav_state_t *mim_nav_get_interceptor(const mim_nav_handle_t handle);
+const nav_state_t *mim_nav_get_target(const mim_nav_handle_t handle);
 
 bool mim_nav_is_engaging(const mim_nav_handle_t handle);
 void mim_nav_set_engaging(mim_nav_handle_t handle, bool enable);

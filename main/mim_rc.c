@@ -28,10 +28,12 @@ void mim_rc_reset() {
     _channels[MIM_RC_CHANNEL_THROTTLE].value = CRSF_RC_CHANNELS_MIN;
 }
 
-void IRAM_ATTR mim_rc_reset_overrides() {
+void IRAM_ATTR mim_rc_reset_overrides(mim_rc_override_level_t level) {
     for (int i = 0; i < CRSF_NUM_CHANNELS; i++) {
-        _channels[i].override = 0;
-        _channels[i].override_level = MIM_RC_OVERRIDE_LEVEL_NONE;
+        if (_channels[i].override_level <= level) {
+            _channels[i].override = 0;
+            _channels[i].override_level = MIM_RC_OVERRIDE_LEVEL_NONE;
+        }
     }
 }
 

@@ -11,10 +11,6 @@ extern "C" {
 
 void mim_menu_init(crsf_device_t *device, mim_nav_handle_t nav);
 
-void mim_menu_set_ip_address(const ip4_addr_t *addr);
-
-void mim_menu_set_connected(bool value);
-
 #ifdef __cplusplus
 }
 #endif

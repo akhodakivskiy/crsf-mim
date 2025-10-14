@@ -117,14 +117,14 @@ nav_type_t nav_compute_accel(
     } else {
         if (nav_pronav(g->N, ctx, accel)) {
             type = NAV_PRONAV;
+
+            la_float a_bias[3];
+            la_float approach_angle_rad = NAV_DEG_TO_RAD(g->attack_angle_deg);
+            nav_compute_tail_bias(approach_angle_rad, g->attack_factor, ctx, a_bias);
+
+            la_add(accel, a_bias, accel, 3);
         }
     }
-
-    la_float a_bias[3];
-    la_float approach_angle_rad = NAV_DEG_TO_RAD(g->attack_angle_deg);
-    nav_compute_tail_bias(approach_angle_rad, g->attack_factor, ctx, a_bias);
-
-    la_add(accel, a_bias, accel, 3);
 
     return type;
 }
@@ -244,7 +244,6 @@ void nav_compute_command(
     la_float unit_lat_norm = la_vec_unit(unit_lat, unit_lat, 3);
     if (unit_lat_norm == 0.0f) {
         ESP_LOGW(TAG, "low lat acc");
-        //return;
     }
 
     command->type = type;

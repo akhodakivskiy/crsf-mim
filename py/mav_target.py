@@ -61,8 +61,9 @@ def run_skymap_target(period: float,
 
         try:
             sock.sendto(data, (ip_skymap, port_skymap))
-        except Exception:
-            print(f"failed to send message to {ip_skymap}, {port_skymap}: {m}")
+        except Exception as e:
+            print(f"failed to send message to {ip_skymap}, {port_skymap}: {e}")
+            print(m)
 
 
 

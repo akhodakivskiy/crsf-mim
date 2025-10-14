@@ -27,7 +27,7 @@ TEST_CASE("test ethernet", "la") {
 
         libnet_config_t config = {
             .priority = configMAX_PRIORITIES - 5,
-            .core_id = PRO_CPUID,
+            .core_id = PRO_CPU_NUM,
             .callbacks = {
                 .connected = _cb_connected,
                 .disconnected = _cb_disconnected,
@@ -63,7 +63,7 @@ TEST_CASE("test wifi", "la") {
 
         libnet_config_t config = {
             .priority = configMAX_PRIORITIES - 5,
-            .core_id = PRO_CPUID,
+            .core_id = PRO_CPU_NUM,
             .callbacks = {
                 .connected = _cb_connected,
                 .disconnected = _cb_disconnected,
