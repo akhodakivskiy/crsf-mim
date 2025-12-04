@@ -1,6 +1,5 @@
 from io import BytesIO
 import time
-from dronekit import Vehicle
 import skymap_pb2 as sm
 import delimited_protobuf as dp
 
@@ -28,30 +27,23 @@ def make_ping() -> sm.ServerMessage:
     m.ping.CopyFrom(sm.Ping())
     return m
 
-def make_estimate(v: Vehicle, name: str) -> sm.TargetEstimate:
+def make_estimate_from_global_position_int(msg, name: str) -> sm.TargetEstimate:
     e = sm.TargetEstimate()
 
     e.timestamp.seconds = int(time.time_ns() / 1000000000)
     e.timestamp.nanos = int(time.time_ns() % 1000000000)
     e.precise_timestamp = False
     e.target_id = name
-    e.position.latitude_deg = v.location._lat
-    e.position.longitude_deg = v.location._lon
-    e.position.altitude_msl_m = v.location._alt
-    e.velocity.north_ms = v._vx or 0
-    e.velocity.east_ms = v._vy or 0
-    e.velocity.up_ms = -(v._vz or 0)
+    e.position.latitude_deg = msg.lat / 1e7
+    e.position.longitude_deg = msg.lon / 1e7
+    e.position.altitude_msl_m = msg.alt / 1000
+    e.velocity.north_ms = (msg.vx / 100) or 0
+    e.velocity.east_ms = (msg.vy / 100) or 0
+    e.velocity.up_ms = (-msg.vz / 100) or 0
 
     return e
 
-def make_target_estimate(v: Vehicle) -> sm.ServerMessage:
+def make_target_estimate(est: sm.TargetEstimate) -> sm.ServerMessage:
     m = sm.ServerMessage()
-    est = make_estimate(v, "target")
     m.target_estimate.CopyFrom(est)
-    return m
-
-def make_interceptor_estimate(v: Vehicle) -> sm.ServerMessage:
-    m = sm.ServerMessage()
-    est = make_estimate(v, "interceptor")
-    m.interceptor_estimate.CopyFrom(est)
     return m

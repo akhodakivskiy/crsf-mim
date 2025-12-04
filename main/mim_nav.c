@@ -1,10 +1,12 @@
 #include "mim_nav.h"
 
 #include "async_logging.h"
+#include "libcrsf_payload.h"
 #include "libnet.h"
 #include "mim_menu.h"
 #include "mim_rc.h"
 #include "libnet.h"
+#include "mim_uart.h"
 #include "portmacro.h"
 #include "skymap.h"
 #include "mim_settings.h"
@@ -15,6 +17,7 @@
 #include <esp_timer.h>
 #include <esp_log.h>
 #include <time.h>
+#include <float.h>
 
 #define _MIM_NAV_TASK_STOP_BIT 1 << 0
 #define _MIM_NAV_QUEUE_SIZE 10
@@ -67,6 +70,7 @@ static void _skymap_estimate_to_nav_state(int64_t timestamp_us, const ai_skyfort
 static void _skymap_handle_crsf_message(int64_t timestsamp_us, mim_nav_handle_t h, const mim_nav_crsf_subset_t *msg);
 
 static void _nav_update(int64_t timestamp_us, mim_nav_handle_t h);
+static void _nav_send_crsf_telemetry(mim_nav_handle_t h);
 
 TaskHandle_t _task_skymap = NULL;
 
@@ -204,7 +208,7 @@ static void _libnet_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t
     }
 
     ESP_ERROR_CHECK(libnet_init(&libnet_cfg, &h->libnet));
-    ESP_ERROR_CHECK(libnet_udp_server_start(h->libnet, 8888));
+    ESP_ERROR_CHECK(libnet_udp_server_start(h->libnet, mim_settings_get()->skymap_udp_port));
 }
 
 static IRAM_ATTR void _task_skymap_impl(void *arg) {
@@ -324,7 +328,7 @@ static void _skymap_handle_server_message(int64_t timestamp_us, mim_nav_handle_t
             _skymap_estimate_to_nav_state(timestamp_us, &msg->message.target_estimate, &h->state_target);
             break;
         default:
-            break;
+            return;
     }
 
     _nav_update(timestamp_us, h);
@@ -360,7 +364,7 @@ static void _skymap_handle_crsf_message(int64_t timestamp_us, mim_nav_handle_t h
         case MIM_NAV_CRSF_SUBSET_TYPE_VARIO:
             h->state_interceptor_crsf.vel_up = msg->message.vario.vspeed_cms / 100.0f;
             break;
-        case MIM_NAV_CRSF_SUBSET_TYPE_ALT:
+        case MIM_NAV_CRSF_SUBSET_TYPE_BAROALT:
             //h->state_interceptor_crsf.vel_up = msg->message.vario.vspeed_cms / 100.0f;
             break;
         default:
@@ -415,5 +419,58 @@ static void _nav_update(int64_t timestamp_us, mim_nav_handle_t h) {
         mim_rc_reset_overrides(MIM_RC_OVERRIDE_LEVEL_GUIDANCE);
     }
 
+    _nav_send_crsf_telemetry(h);
+
     h->time_last_update = timestamp_us;
+}
+
+static void _nav_send_crsf_telemetry(mim_nav_handle_t h) {
+    static uint64_t last_time = 0;
+
+    if (esp_timer_get_time() - last_time > 250000) { // 4Hz
+        last_time = esp_timer_get_time();
+
+        crsf_payload_ardupilot_t payload;
+
+        bool is_target_ready = _is_nav_state_ready(last_time, &h->state_target);
+        bool is_interceptor_ready = _is_nav_state_ready(last_time, &h->state_interceptor);
+        bool is_interceptor_crsf_ready = _is_nav_state_ready(last_time, &h->state_interceptor_crsf);
+
+        payload.subtype = CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI;
+        payload.multi.size = 7;
+        payload.multi.values[0].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_STATUS;
+        payload.multi.values[0].data = 
+            (h->is_connected) |
+            (h->is_engaging << 1) |
+            (is_target_ready << 2) |
+            (is_interceptor_ready << 3) |
+            (is_interceptor_crsf_ready << 4);
+
+
+        payload.multi.values[1].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_LAT;
+        payload.multi.values[1].data = (uint32_t)(h->command.accel_lat * 1000);
+
+        payload.multi.values[2].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_VER;
+        payload.multi.values[2].data = (uint32_t)(h->command.accel_ver * 1000);
+
+        payload.multi.values[3].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_HOR;
+        payload.multi.values[3].data = (uint32_t)(h->command.range_hor);
+
+        payload.multi.values[4].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_VER;
+        payload.multi.values[4].data = (int32_t)(h->command.range_ver);
+
+        payload.multi.values[5].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ZEM;
+        payload.multi.values[5].data = (uint32_t)h->command.zero_effort_miss_m;
+
+        payload.multi.values[6].appid = MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_TTGO;
+        payload.multi.values[6].data = (uint32_t)h->command.time_to_go_s;
+
+        crsf_frame_t frame;
+        crsf_payload_pack__ardupilot(&frame, &payload);
+
+        ESP_LOGI(TAG, "sending crsf message");
+        ESP_LOG_BUFFER_HEX(TAG, frame.data, frame.length - 1);
+
+        mim_uart_enqueue_module_frame(&frame);
+    }
 }

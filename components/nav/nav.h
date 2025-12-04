@@ -37,6 +37,8 @@ typedef enum {
 typedef struct {
     nav_type_t type;
     la_float range;
+    la_float range_hor;
+    la_float range_ver;
     la_float accel_lon;
     la_float accel_lat;
     la_float accel_ver;

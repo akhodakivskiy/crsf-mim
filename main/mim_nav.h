@@ -27,7 +27,7 @@ typedef enum {
 
 typedef enum {
     MIM_NAV_CRSF_SUBSET_TYPE_GPS,
-    MIM_NAV_CRSF_SUBSET_TYPE_ALT,
+    MIM_NAV_CRSF_SUBSET_TYPE_BAROALT,
     MIM_NAV_CRSF_SUBSET_TYPE_VARIO,
     MIM_NAV_CRSF_SUBSET_TYPE_AIRSPEED,
 } mim_nav_crsf_subset_type_t;
@@ -56,6 +56,16 @@ typedef struct {
         mim_nav_crsf_subset_t crsf;
     } message;
 } mim_nav_msg_t;
+
+typedef enum {
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_STATUS = 0x6000,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_LAT = 0x6001,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_VER = 0x6002,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_HOR = 0x6003,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_VER = 0x6004,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ZEM = 0x6005,
+    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_TTGO = 0x6006,
+} mim_nav_crsf_ardupilot_payload_appid_t;
 
 typedef struct mim_nav_ctx_s *mim_nav_handle_t;
 

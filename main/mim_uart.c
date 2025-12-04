@@ -127,7 +127,9 @@ void mim_uart_set_module_handler(mim_uart_handler handler) {
 
 void IRAM_ATTR mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
     assert(_is_init);
-    assert(xQueueSend(_module_s.queue_out, frame, 0) == pdPASS);
+    if (xQueueSend(_module_s.queue_out, frame, 0) != pdPASS) {
+        ESP_LOGE(TAG, "failed to enqueue module frame, type=%x, length=%u", frame->type, frame->length);
+    }
 }
 
 static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *queue) {

@@ -173,7 +173,7 @@ static void _param_u8_nav_attack_angle_set(const crsf_device_param_write_value_t
 
 static void _param_float_nav_attack_factor_get(crsf_device_param_read_value_t *value) {
     value->flt.value = mim_settings_get()->nav.attack_factor * 10;
-    value->flt.value_min = 10;
+    value->flt.value_min = 0;
     value->flt.value_max = 100;
     value->flt.decimal_places = 1;
     value->flt.step = 1;
@@ -408,23 +408,29 @@ static const char *_param_command_nav_cmd_type_label(nav_type_t type) {
 static bool _param_track_enabled = false;
 
 static void _param_command_track_get(crsf_device_param_read_value_t *value) {
-    const nav_command_t *cmd = mim_nav_get_last_command(_mim_menu_nav);
-    const char *cmd_type_label = _param_command_nav_cmd_type_label(cmd->type);
+    if (_param_track_enabled) {
+        const nav_command_t *cmd = mim_nav_get_last_command(_mim_menu_nav);
+        const char *cmd_type_label = _param_command_nav_cmd_type_label(cmd->type);
 
-    const char *status_target = _param_command_estimage_status_label(mim_nav_target_status(_mim_menu_nav));
-    const char *status_interceptor = _param_command_estimage_status_label(mim_nav_interceptor_status(_mim_menu_nav));
+        const char *status_target = _param_command_estimage_status_label(mim_nav_target_status(_mim_menu_nav));
+        const char *status_interceptor = _param_command_estimage_status_label(mim_nav_interceptor_status(_mim_menu_nav));
 
-    snprintf(_mim_menu_command_status, _MIM_MENU_MAX_COMMAND_STATUS_LENGTH, 
-             "[t%s i%s %s]\x1E"
-             "r=%.1f\x1E"
-             "ah=%.1f av=%.1f\x1E"
-             "tgo=%.0f 0em=%.0f ",
-             status_target, status_interceptor, cmd_type_label, 
-             cmd->range, cmd->accel_lat, cmd->accel_ver, cmd->time_to_go_s, cmd->zero_effort_miss_m);
+        snprintf(_mim_menu_command_status, _MIM_MENU_MAX_COMMAND_STATUS_LENGTH, 
+                 "[t%s i%s %s]\x1E"
+                 "r=%.1f dh=f%.f\x1E"
+                 "ah=%.1f av=%.1f ",
+                 //"tgo=%.0f 0em=%.0f ",
+                 status_target, status_interceptor, cmd_type_label, 
+                 cmd->range, cmd->range_ver, cmd->accel_lat, cmd->accel_ver /*cmd->time_to_go_s, cmd->zero_effort_miss_m*/);
 
-    value->command.state = CRSF_COMMAND_STATE_PROGRESS;
-    value->command.status = _mim_menu_command_status;
-    value->command.timeout = 20;
+        value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+        value->command.status = _mim_menu_command_status;
+        value->command.timeout = 20;
+    } else {
+        value->command.state = CRSF_COMMAND_STATE_READY;
+        value->command.status = "";
+        value->command.timeout = 20;
+    }
 }
 
 static void _param_command_track_set(const crsf_device_param_write_value_t *value) {
@@ -442,39 +448,48 @@ static void _param_command_track_set(const crsf_device_param_write_value_t *valu
     }
 }
 
+static bool _param_state_is_enabled = false;
 static bool _param_state_is_target = false;
 
 static void _param_command_state_get(crsf_device_param_read_value_t *value) {
-    const nav_state_t *s = NULL;
-    const char *label = NULL;
-    if (_param_state_is_target) {
-        s = mim_nav_get_target(_mim_menu_nav);
-        label = "target";
+    if (_param_state_is_enabled) {
+        const nav_state_t *s = NULL;
+        const char *label = NULL;
+        if (_param_state_is_target) {
+            s = mim_nav_get_target(_mim_menu_nav);
+            label = "target";
+        } else {
+            s = mim_nav_get_interceptor(_mim_menu_nav);
+            label = "interceptor";
+        }
+
+        float vh = la_sqrt(la_pow(s->vel_east, 2) + la_pow(s->vel_north, 2));
+
+        snprintf(_mim_menu_command_status, _MIM_MENU_MAX_COMMAND_STATUS_LENGTH, 
+                 "%s\x1E"
+                 "alt=%.1f\x1E"
+                 "vh=%.1f vz=%.1f ",
+                 label, s->alt, vh, s->vel_up);
+        value->command.state = CRSF_COMMAND_STATE_PROGRESS;
+        value->command.status = _mim_menu_command_status;
+        value->command.timeout = 20;
     } else {
-        s = mim_nav_get_interceptor(_mim_menu_nav);
-        label = "interceptor";
+        value->command.state = CRSF_COMMAND_STATE_READY;
+        value->command.status = "";
+        value->command.timeout = 20;
     }
-
-    float vh = la_sqrt(la_pow(s->vel_east, 2) + la_pow(s->vel_north, 2));
-
-    snprintf(_mim_menu_command_status, _MIM_MENU_MAX_COMMAND_STATUS_LENGTH, 
-             "%s\x1E"
-             "alt=%.1f\x1E"
-             "vh=%.1f vz=%.1f ",
-             label, s->alt, vh, s->vel_up);
-    value->command.state = CRSF_COMMAND_STATE_PROGRESS;
-    value->command.status = _mim_menu_command_status;
-    value->command.timeout = 20;
 }
 
 static void _param_command_state_set(const crsf_device_param_write_value_t *value) {
     switch (value->command_action) {
         case CRSF_COMMAND_STATE_START:
+            _param_state_is_enabled = true;
             _param_state_is_target = !_param_state_is_target;
             break;
         case CRSF_COMMAND_STATE_POLL:
             break;
         case CRSF_COMMAND_STATE_CANCEL:
+            _param_state_is_enabled = false;
             break;
         default:
             assert(false);

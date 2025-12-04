@@ -84,6 +84,7 @@ typedef enum : uint8_t {
     CRSF_FRAME_TYPE_MSP_RESP = 0x7B,   // reply with 58 byte chunked binary
     CRSF_FRAME_TYPE_MSP_WRITE = 0x7C,  // write with 8 byte chunked binary (OpenTX outbound telemetry buffer limit)
     CRSF_FRAME_TYPE_ARDUPILOT_LEGACY = 0x7F,  // Legacy Ardupilot Frame
+    CRSF_FRAME_TYPE_ARDUPILOT= 0x80,  // Ardupilot Frame
 } crsf_frame_type_t;
 
 typedef enum : uint8_t {

@@ -112,6 +112,32 @@ typedef struct {
     uint16_t airspeed_100ms;
 } crsf_payload_airspeed_t;
 
+typedef enum : uint8_t {
+    CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_SINGLE = 0xF0,
+    CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI = 0xF2,
+    CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_TEXT = 0xF1,
+} crsf_payload_ardupilot_subtype_t;
+
+typedef struct {
+    uint16_t appid;
+    uint32_t data;
+} crsf_payload_ardupilot_data_t;
+
+typedef struct {
+    crsf_payload_ardupilot_subtype_t subtype;
+    union {
+        crsf_payload_ardupilot_data_t single;
+        struct {
+            uint8_t size;
+            crsf_payload_ardupilot_data_t values[9];
+        } multi;
+        struct {
+            uint8_t severity;
+            char text[50];
+        } text;
+    }; 
+} crsf_payload_ardupilot_t;
+
 bool crsf_payload__rc_channels_unpack(const crsf_frame_t *frame, crsf_payload_rc_channels_t *payload);
 void crsf_payload__rc_channels_pack(crsf_frame_t *frame, const crsf_payload_rc_channels_t *payload);
 uint16_t crsf_payload__rc_channels_get(const crsf_payload_rc_channels_t *payload, uint8_t channel);
@@ -128,10 +154,12 @@ bool crsf_payload_unpack__gps(const crsf_frame_t *frame, crsf_payload_gps_t *pay
 bool crsf_payload_unpack__baro_altitude(const crsf_frame_t *frame, crsf_payload_baro_altitude_t *payload);
 bool crsf_payload_unpack__vario(const crsf_frame_t *frame, crsf_payload_vario_t *payload);
 bool crsf_payload_unpack__airspeed(const crsf_frame_t *frame, crsf_payload_airspeed_t *payload);
+bool crsf_payload_unpack__ardupilot(const crsf_frame_t *frame, crsf_payload_ardupilot_t *payload);
 
 // Pack payload structure into CRSF frame
 void crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload);
 void crsf_payload_pack__param_entry(crsf_frame_t *frame, const crsf_payload_device_param_entry_t *payload);
+void crsf_payload_pack__ardupilot(crsf_frame_t *frame, const crsf_payload_ardupilot_t *payload);
 
 // Modify CRSF frame in place
 bool crsf_payload_modify__timing_correction(crsf_frame_t *frame, uint32_t interval_100ns, int32_t offset_100ns);

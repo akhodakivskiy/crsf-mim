@@ -248,6 +248,8 @@ void nav_compute_command(
 
     command->type = type;
     command->range = ctx.range_norm;
+    command->range_hor = la_sqrt(ctx.range[0] * ctx.range[0] + ctx.range[1] * ctx.range[1]);
+    command->range_ver = ctx.range[2];
     command->accel_lon = la_vec_dot(accel, unit_lon, 3), 
     command->accel_lat = la_vec_dot(accel, unit_lat, 3), 
     command->accel_ver = -la_vec_dot(accel, unit_down, 3);

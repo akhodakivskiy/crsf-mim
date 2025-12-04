@@ -86,18 +86,34 @@ static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
     mim_nav_msg_t msg;
     msg.type = MIM_NAV_MSG_TYPE_CRSF;
 
+    crsf_payload_ardupilot_t frame_ap;
+
     if (crsf_payload_unpack__gps(frame, &msg.message.crsf.message.gps)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_GPS;
-        ESP_LOGI(TAG, "gps");
     } else if (crsf_payload_unpack__baro_altitude(frame, &msg.message.crsf.message.alt)) {
-        msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_ALT;
-        ESP_LOGI(TAG, "alt");
+        msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_BAROALT;
     } else if (crsf_payload_unpack__vario(frame, &msg.message.crsf.message.vario)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_VARIO;
-        ESP_LOGI(TAG, "vario");
     } else if (crsf_payload_unpack__airspeed(frame, &msg.message.crsf.message.airspeed)) {
         msg.message.crsf.type = MIM_NAV_CRSF_SUBSET_TYPE_AIRSPEED;
-        ESP_LOGI(TAG, "aspd");
+    } else if (crsf_payload_unpack__ardupilot(frame, &frame_ap)) {
+        ESP_LOG_BUFFER_HEX(TAG, frame->data, frame->length - 1);
+        switch (frame_ap.subtype) {
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_SINGLE:
+                ESP_LOGI(TAG, "ardupilot frame[type=%x, length=%u], subtype=SINGLE, appid=%x, data=%x", frame->type, frame->length, frame_ap.single.appid, frame_ap.single.data);
+                break;
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI:
+                ESP_LOGI(TAG, "ardupilot frame[type=%x, length=%u], subtype=MULTI, size=%u", frame->type, frame->length, frame_ap.multi.size);
+                for (int i = 0; i < frame_ap.multi.size; i++) {
+                    ESP_LOGI(TAG, "-- idx=%u, appid=%x, data=%x", i, frame_ap.multi.values[i].appid, frame_ap.multi.values[i].data);
+                }
+                break;
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_TEXT:
+                ESP_LOGI(TAG, "ardupilot frame[type=%x, length=%u], subtype=TEXT, severity=%u, text=%s", frame->type, frame->length, frame_ap.text.severity, frame_ap.text.text);
+                break;
+            default:
+                assert(false);
+        }
     } else {
         return;
     }

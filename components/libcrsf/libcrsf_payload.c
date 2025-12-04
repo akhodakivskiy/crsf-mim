@@ -228,6 +228,37 @@ bool IRAM_ATTR crsf_payload_unpack__airspeed(const crsf_frame_t *frame, crsf_pay
     return false;
 }
 
+bool IRAM_ATTR crsf_payload_unpack__ardupilot(const crsf_frame_t *frame, crsf_payload_ardupilot_t *payload) {
+    if (frame->type == CRSF_FRAME_TYPE_ARDUPILOT || frame->type == CRSF_FRAME_TYPE_ARDUPILOT_LEGACY) {
+        uint8_t cursor = 0;
+        payload->subtype = frame->data[(cursor++)];
+        switch (payload->subtype) {
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_SINGLE:
+                payload->single.appid = *(uint16_t *)(frame->data + cursor); cursor += 2;
+                payload->single.data = *(uint32_t *)(frame->data + cursor); cursor += 4;
+                break;
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI:
+                payload->multi.size = *(uint8_t *)(frame->data + (cursor++));
+                assert(payload->multi.size < 10);
+                for (int i = 0; i < payload->multi.size; i++) {
+                    payload->multi.values[i].appid = *(uint16_t *)(frame->data + cursor); cursor += 2;
+                    payload->multi.values[i].data = *(uint32_t *)(frame->data + cursor); cursor += 4;
+                }
+                break;
+            case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_TEXT:
+                payload->text.severity = *(uint8_t *)(frame->data + (cursor++));
+                strcpy((char *)payload->text.text, (char *)frame->data + cursor);
+                break;
+            default:
+                ESP_LOGW(TAG, "unexpected ArduPilot frame subtype: %u", payload->subtype);
+                return false;
+        }
+        return true;
+    }
+
+    return false;
+}
+
 void IRAM_ATTR crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_payload_device_info_t *payload) {
     frame->sync = CRSF_SYNC_BYTE;
     frame->type = CRSF_FRAME_TYPE_DEVICE_INFO;
@@ -251,27 +282,48 @@ void IRAM_ATTR crsf_payload_pack__device_info(crsf_frame_t *frame, const crsf_pa
 }
 
 /* begin helper macro definitions */
-#define _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, VALUE, SIZE) { \
-    if (SIZE == 1) { \
-        uint8_t value8_be = VALUE; \
-        memcpy(BUFFER + OFFSET, &value8_be, SIZE); OFFSET += SIZE; \
-    } else if (SIZE == 2) { \
-        uint16_t value16_be = htobe16(VALUE); \
-        memcpy(BUFFER + OFFSET, &value16_be, SIZE); OFFSET += SIZE; \
-    } else if (SIZE == 4) { \
-        uint32_t value32_be = htobe32(VALUE); \
-        memcpy(BUFFER + OFFSET, &value32_be, SIZE); OFFSET += SIZE; \
-    } else { \
-        assert(false); \
-    } \
+#define _CRSF_PAYLOAD_WRITE_BYTE(BUFFER, OFFSET, VALUE) { \
+    uint8_t value8_be = VALUE; \
+    memcpy(BUFFER + OFFSET, &value8_be, 1); OFFSET += 1; \
 } \
 
-#define _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(BUFFER, OFFSET, PAYLOAD, TYPE, SIZE) \
-_CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value), SIZE); \
-_CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_min ), SIZE); \
-_CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_max ), SIZE); \
-/* last value is the 'default' value */ \
-_CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value), SIZE); \
+#define _CRSF_PAYLOAD_WRITE_WORD_BE(BUFFER, OFFSET, VALUE) { \
+    uint16_t value16 = htobe16(VALUE); \
+    memcpy(BUFFER + OFFSET, &value16, 2); OFFSET += 2; \
+} \
+
+#define _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(BUFFER, OFFSET, VALUE) { \
+    uint32_t value32 = htobe32(VALUE); \
+    memcpy(BUFFER + OFFSET, &value32, 4); OFFSET += 4; \
+} \
+
+#define _CRSF_PAYLOAD_WRITE_WORD_LE(BUFFER, OFFSET, VALUE) { \
+    uint16_t value16 = htole16(VALUE); \
+    memcpy(BUFFER + OFFSET, &value16, 2); OFFSET += 2; \
+} \
+
+#define _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_LE(BUFFER, OFFSET, VALUE) { \
+    uint32_t value32 = htole32(VALUE); \
+    memcpy(BUFFER + OFFSET, &value32, 4); OFFSET += 4; \
+} \
+
+#define _CRSF_PAYLOAD_WRITE_ENTRY_BYTE(BUFFER, OFFSET, PAYLOAD, TYPE) \
+_CRSF_PAYLOAD_WRITE_BYTE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
+_CRSF_PAYLOAD_WRITE_BYTE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_min )); \
+_CRSF_PAYLOAD_WRITE_BYTE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_max )); \
+_CRSF_PAYLOAD_WRITE_BYTE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
+
+#define _CRSF_PAYLOAD_WRITE_ENTRY_WORD_BE(BUFFER, OFFSET, PAYLOAD, TYPE) \
+_CRSF_PAYLOAD_WRITE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
+_CRSF_PAYLOAD_WRITE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_min )); \
+_CRSF_PAYLOAD_WRITE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_max )); \
+_CRSF_PAYLOAD_WRITE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
+
+#define _CRSF_PAYLOAD_WRITE_ENTRY_DOUBLE_WORD_BE(BUFFER, OFFSET, PAYLOAD, TYPE) \
+_CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
+_CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_min )); \
+_CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value_max )); \
+_CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(BUFFER, OFFSET, (PAYLOAD -> value . TYPE . value)); \
 
 #define _CRSF_PAYLOAD_WRITE_STRING(BUFFER, OFFSET, VALUE) { \
     size_t units_len = strlen(VALUE); \
@@ -300,36 +352,36 @@ void IRAM_ATTR crsf_payload_pack__param_entry(crsf_frame_t *frame,
 
     switch (payload->type) {
         case CRSF_PARAM_TYPE_UINT8:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, u8, 1);
+            _CRSF_PAYLOAD_WRITE_ENTRY_BYTE(frame->data, i, payload, u8);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, u8);
             break;
         case CRSF_PARAM_TYPE_INT8:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, i8, 1);
+            _CRSF_PAYLOAD_WRITE_ENTRY_BYTE(frame->data, i, payload, i8);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, i8);
             break;
         case CRSF_PARAM_TYPE_UINT16:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, u16, 2);
+            _CRSF_PAYLOAD_WRITE_ENTRY_WORD_BE(frame->data, i, payload, u16);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, u16);
             break;
         case CRSF_PARAM_TYPE_INT16:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, i16, 2);
+            _CRSF_PAYLOAD_WRITE_ENTRY_WORD_BE(frame->data, i, payload, i16);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, i16);
             break;
         case CRSF_PARAM_TYPE_UINT32:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, u32, 4);
+            _CRSF_PAYLOAD_WRITE_ENTRY_DOUBLE_WORD_BE(frame->data, i, payload, u32);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, u32);
             break;
         case CRSF_PARAM_TYPE_INT32:
-            _CRSF_PAYLOAD_WRITE_ENTRY_VALUE(frame->data, i, payload, i32, 4);
+            _CRSF_PAYLOAD_WRITE_ENTRY_DOUBLE_WORD_BE(frame->data, i, payload, i32);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, i32);
             break;
         case CRSF_PARAM_TYPE_FLOAT:
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.value, 4);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.value_min, 4);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.value_max, 4);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.value, 4); // default value 
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.decimal_places, 1);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.flt.step, 4);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(frame->data, i, payload->value.flt.value);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(frame->data, i, payload->value.flt.value_min);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(frame->data, i, payload->value.flt.value_max);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(frame->data, i, payload->value.flt.value); // default value 
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->value.flt.decimal_places);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_BE(frame->data, i, payload->value.flt.step);
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, flt);
             break;
         case CRSF_PARAM_TYPE_SELECT:
@@ -339,15 +391,15 @@ void IRAM_ATTR crsf_payload_pack__param_entry(crsf_frame_t *frame,
                     frame->data[i - 1] = ';';
                 }
             }
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.select.index, 1);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, 0, 1);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, 0, 1);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, 0, 1); // default value 
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->value.select.index);
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, 0);
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, 0);
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, 0); // default value 
             _CRSF_PAYLOAD_WRITE_UNITS(frame->data, i, payload, select);
             break;
         case CRSF_PARAM_TYPE_COMMAND:
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.command.state, 1);
-            _CRSF_PAYLOAD_WRITE_ENTRY_NUMBER(frame->data, i, payload->value.command.timeout, 1);
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->value.command.state);
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->value.command.timeout);
             _CRSF_PAYLOAD_WRITE_STRING(frame->data, i, payload->value.command.status);
             break;
         case CRSF_PARAM_TYPE_FOLDER:
@@ -366,6 +418,43 @@ void IRAM_ATTR crsf_payload_pack__param_entry(crsf_frame_t *frame,
         case CRSF_PARAM_TYPE_INT64:
         default:
             ESP_LOGE(TAG, "expresslrs doesn't support 32 and 64 bit numbers");
+            assert(false);
+    }
+
+    frame->length = i + 2; // payload + type + crc
+    frame->data[frame->length - 2] = crsf_calc_crc8(frame);
+}
+
+void IRAM_ATTR crsf_payload_pack__ardupilot(crsf_frame_t *frame, const crsf_payload_ardupilot_t *payload) {
+    uint8_t i = 0;
+
+    frame->sync = CRSF_SYNC_BYTE;
+    frame->type = CRSF_FRAME_TYPE_ARDUPILOT;
+
+    _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->subtype);
+    switch (payload->subtype) {
+        case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_SINGLE:
+            _CRSF_PAYLOAD_WRITE_WORD_LE(frame->data, i, payload->single.appid);
+            _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_LE(frame->data, i, payload->single.data);
+            break;
+        case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI:
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->multi.size);
+            for (int j = 0; j < 9; j++) {
+                // we have to write all 9 values, otherwire some parsers will fail
+                if (j < payload->multi.size) {
+                    _CRSF_PAYLOAD_WRITE_WORD_LE(frame->data, i, payload->multi.values[j].appid);
+                    _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_LE(frame->data, i, payload->multi.values[j].data);
+                } else {
+                    _CRSF_PAYLOAD_WRITE_WORD_LE(frame->data, i, 0);
+                    _CRSF_PAYLOAD_WRITE_DOUBLE_WORD_LE(frame->data, i, 0);
+                }
+            }
+            break;
+        case CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_TEXT:
+            _CRSF_PAYLOAD_WRITE_BYTE(frame->data, i, payload->text.severity);
+            _CRSF_PAYLOAD_WRITE_STRING(frame->data, i, payload->text.text);
+            break;
+        default:
             assert(false);
     }
 
