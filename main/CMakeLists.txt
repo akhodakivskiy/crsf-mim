@@ -3,6 +3,7 @@ idf_component_register(
     "mim_menu.c" 
     "mim_uart.c"
     "mim_settings.c"
+    "mim_conn.c"
     "mim_nav.c"
     "mim_rc.c" 
     "main.c" 

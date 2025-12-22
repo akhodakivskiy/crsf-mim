@@ -1,31 +1,28 @@
 #include "mim_uart.h"
 
-#include <freertos/FreeRTOS.h>
+#include <driver/gptimer.h>
 #include <driver/uart.h>
-#include <hal/uart_ll.h>
-#include <soc/uart_periph.h>
+#include <esp_cpu.h>
 #include <esp_intr_alloc.h>
 #include <esp_log.h>
 #include <esp_timer.h>
-#include <esp_cpu.h>
+#include <freertos/FreeRTOS.h>
+#include <hal/uart_ll.h>
+#include <soc/uart_periph.h>
 #include <xtensa/core-macros.h>
-#include <driver/gptimer.h>
 
-#include "driver/gptimer_types.h"
 #include "freertos/idf_additions.h"
 #include "libcrsf.h"
 #include "libcrsf_def.h"
-#include "libcrsf_def.h"
-#include "libcrsf_payload.h"
 #include "portmacro.h"
 #include "util.h"
 #include "util_lqcalc.h"
 
-static const char *TAG= "MIM_UART";
+static const char *TAG = "MIM_UART";
 
 #define MIM_UART_EVENT_TIMER UART_EVENT_MAX + 1
 
-#define MIM_UART_WDT_TIMEOUT 1000000 // 1 second
+#define MIM_UART_WDT_TIMEOUT 1000000     // 1 second
 #define MIM_UART_AUTOBAUD_TIMEOUT 500000 // 500 milliseconds
 static const int32_t MIM_UART_BAUD_RATES[] = {400000, 115200, 5250000, 3750000, 1870000, 921600, 2250000};
 static const int32_t MIM_UART_PACKET_RATES[] = {250, 62, 500, 500, 500, 500, 250};
@@ -67,8 +64,8 @@ static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin);
 static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin);
 static bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *frame);
 static void _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
-//static void _task_crsf_controller_impl(void *arg);
-//static void _task_crsf_module_impl(void *arg);
+// static void _task_crsf_controller_impl(void *arg);
+// static void _task_crsf_module_impl(void *arg);
 static void _task_crsf_impl(void *arg);
 static void _uart_wdt(util_lqcalc_t *lq_calc);
 static uint32_t _autobaud();
@@ -82,48 +79,38 @@ static void _timer_set_period(gptimer_handle_t timer, uint32_t period_us, int32_
 static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx);
 */
 
-void mim_uart_init(BaseType_t core, UBaseType_t priority, 
-                   uart_port_t port_controller, gpio_num_t pin_controller,
-                   uart_port_t port_module, gpio_num_t pin_module) {
+void mim_uart_init(const mim_uart_config_t *cfg) {
     assert(!_is_init);
 
     _autobaud_s.last_uart_wdt_time = 0;
     _autobaud_s.start_time = 0;
     _autobaud_s.idx = 0;
 
-    _controller_s.port = port_controller;
-    _controller_s.pin = pin_controller;
+    _controller_s.port = cfg->port_controller;
+    _controller_s.pin = cfg->pin_controller;
     _controller_s.queue_out = xQueueCreate(1, sizeof(crsf_frame_t));
 
-    _module_s.port = port_module;
-    _module_s.pin = pin_module;
+    _module_s.port = cfg->port_module;
+    _module_s.pin = cfg->pin_module;
     _module_s.queue_out = xQueueCreate(10, sizeof(crsf_frame_t));
 
     _timing_s.last_correction_time = 0;
     _timing_s.correction_pending = false;
-    _timing_s.period_us = 1000000 / MIM_UART_PACKET_RATES[_autobaud_s.idx]; 
+    _timing_s.period_us = 1000000 / MIM_UART_PACKET_RATES[_autobaud_s.idx];
 
     gpio_set_direction(MIM_GPIO_CONTROLLER_TX, GPIO_MODE_OUTPUT);
     gpio_set_direction(MIM_GPIO_MODULE_TX, GPIO_MODE_OUTPUT);
     gpio_set_direction(MIM_GPIO_MODULE_DATA_INTR, GPIO_MODE_OUTPUT);
     gpio_set_direction(MIM_GPIO_CONTROLLER_DATA_INTR, GPIO_MODE_OUTPUT);
-    //gpio_set_direction(GPIO_NUM_35, GPIO_MODE_OUTPUT);
-    //gpio_set_direction(GPIO_NUM_36, GPIO_MODE_OUTPUT);
 
-    //assert(xTaskCreatePinnedToCore(_task_crsf_controller_impl, "task_crsf_controller", 4096, NULL, priority, &_controller_s.task, core) == pdPASS);
-    //assert(xTaskCreatePinnedToCore(_task_crsf_module_impl, "task_crsf_module", 4096, NULL, priority, &_module_s.task, core) == pdPASS);
-    assert(xTaskCreatePinnedToCore(_task_crsf_impl, "task_crsf", 4096, NULL, priority, NULL, core) == pdPASS);
+    assert(xTaskCreatePinnedToCore(_task_crsf_impl, "task_crsf", 4096, NULL, cfg->priority, NULL, cfg->core) == pdPASS);
 
     _is_init = true;
 }
 
-void mim_uart_set_controller_handler(mim_uart_handler handler) {
-    _controller_s.handler = handler;
-}
+void mim_uart_set_controller_handler(mim_uart_handler handler) { _controller_s.handler = handler; }
 
-void mim_uart_set_module_handler(mim_uart_handler handler) {
-    _module_s.handler = handler;
-}
+void mim_uart_set_module_handler(mim_uart_handler handler) { _module_s.handler = handler; }
 
 void IRAM_ATTR mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
     assert(_is_init);
@@ -152,9 +139,7 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
     ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 10, queue, ESP_INTR_FLAG_LEVEL3));
 
     if (queue != NULL) {
-        uint32_t uart_intr_mask = 
-            UART_INTR_RXFIFO_FULL | 
-            UART_INTR_RXFIFO_TOUT;
+        uint32_t uart_intr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT;
 
         uart_intr_config_t intr_cfg = {
             .intr_enable_mask = uart_intr_mask,
@@ -177,7 +162,7 @@ static IRAM_ATTR void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin)
 
 static IRAM_ATTR void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT));
-    //gpio_matrix_in(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
+    // gpio_matrix_in(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
     esp_rom_gpio_connect_in_signal(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
     ESP_ERROR_CHECK(gpio_set_pull_mode(pin, GPIO_PULLDOWN_ONLY));
 
@@ -208,7 +193,13 @@ static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *fram
                 break;
             } else if (err != CRSF_PARSE_RESULT_NEED_MORE_DATA) {
                 ESP_LOG_BUFFER_HEX(TAG, (uint8_t *)buff, len_read);
-                ESP_LOGE(TAG, "crsf port=%u [parser error=%u, state=%u], [buffer len=%u, read=%u]", port, err, p.state, len_buffer, len_read);
+                ESP_LOGE(TAG,
+                         "crsf port=%u [parser error=%u, state=%u], [buffer len=%u, read=%u]",
+                         port,
+                         err,
+                         p.state,
+                         len_buffer,
+                         len_read);
             }
         }
     }
@@ -219,9 +210,8 @@ static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *fram
     return result;
 }
 
-
-void IRAM_ATTR _uart_write_crsf_frame(uart_port_t port,  crsf_frame_t *frame) {
-    uint8_t header[3] = { frame->sync, frame->length, frame->type };
+void IRAM_ATTR _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame) {
+    uint8_t header[3] = {frame->sync, frame->length, frame->type};
     assert(uart_write_bytes(port, header, 3) == 3);
     if (frame->length > 1) {
         int size_written = uart_write_bytes(port, frame->data, frame->length - 1);
@@ -435,7 +425,8 @@ static void IRAM_ATTR _task_crsf_impl(void *arg) {
                     has_frame_from_module = false;
                 }
             } else {
-                //ESP_LOGE(TAG, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller, event.size, event.timeout_flag);
+                // ESP_LOGE(TAG, "unhandled uart event=0x%x, port=%u, size=%u, flag=%u", event.type, _port_controller,
+                // event.size, event.timeout_flag);
             }
         }
     }
@@ -445,10 +436,11 @@ static void IRAM_ATTR _uart_wdt(util_lqcalc_t *lq_calc) {
     int64_t time = esp_timer_get_time();
     uint8_t lq = util_lqcalc_get_lq(lq_calc);
 
-    //ESP_LOGI(TAG, "uart wdt on port=%u, pin=%u, lq=%u, time=%llu, last_wdt_time=%llu", port, pin, util_lqcalc_get_lq(&_lq), time, _last_uart_wdt_time);
+    // ESP_LOGI(TAG, "uart wdt on port=%u, pin=%u, lq=%u, time=%llu, last_wdt_time=%llu", port, pin,
+    // util_lqcalc_get_lq(&_lq), time, _last_uart_wdt_time);
     if (time - _autobaud_s.last_uart_wdt_time < MIM_UART_WDT_TIMEOUT) {
         return;
-    } 
+    }
 
     if (lq < 50) {
         uint32_t baud = _autobaud();
@@ -468,13 +460,17 @@ static void IRAM_ATTR _uart_wdt(util_lqcalc_t *lq_calc) {
 
             _timing_s.period_us = 1000000 / rate;
 
-            ESP_LOGI(TAG, "baud rate detected baud=%lu, nearest=%lu, packet_rate=%lu, period=%lu", baud, autobaud, rate, _timing_s.period_us);
+            ESP_LOGI(TAG,
+                     "baud rate detected baud=%lu, nearest=%lu, packet_rate=%lu, period=%lu",
+                     baud,
+                     autobaud,
+                     rate,
+                     _timing_s.period_us);
 
             uart_set_baudrate(_controller_s.port, baud);
             _uart_half_duplex_set_rx(_controller_s.port, _controller_s.pin);
             uart_set_baudrate(_module_s.port, baud);
             _uart_half_duplex_set_rx(_module_s.port, _module_s.pin);
-
 
             util_lqcalc_reset_100(lq_calc);
         }
@@ -486,7 +482,6 @@ static void IRAM_ATTR _uart_wdt(util_lqcalc_t *lq_calc) {
     } else {
         _autobaud_s.last_uart_wdt_time = time;
     }
-
 }
 
 static uint32_t IRAM_ATTR _autobaud() {
@@ -498,7 +493,11 @@ static uint32_t IRAM_ATTR _autobaud() {
 
     if (_autobaud_s.start_time > 0) {
         if (time - _autobaud_s.start_time > MIM_UART_AUTOBAUD_TIMEOUT) {
-            ESP_LOGW(TAG, "baud rate detection timeout after %uus, autobaud en: %u, edges detected: %u", MIM_UART_AUTOBAUD_TIMEOUT, u->conf0.autobaud_en, u->rxd_cnt.rxd_edge_cnt);
+            ESP_LOGW(TAG,
+                     "baud rate detection timeout after %uus, autobaud en: %u, edges detected: %u",
+                     MIM_UART_AUTOBAUD_TIMEOUT,
+                     u->conf0.autobaud_en,
+                     u->rxd_cnt.rxd_edge_cnt);
             _autobaud_s.start_time = 0;
 
             u->conf0.autobaud_en = 0;
@@ -524,7 +523,7 @@ static uint32_t IRAM_ATTR _autobaud() {
         // start baud rate detection
         _autobaud_s.start_time = time;
 
-        assert(u->clk_conf.sclk_sel == 1);  // assume APB clock source
+        assert(u->clk_conf.sclk_sel == 1); // assume APB clock source
 
         if (!u->conf0.autobaud_en) {
             u->rx_filt.glitch_filt = 8;

@@ -26,7 +26,7 @@ static const mim_settings_t mim_settings_default = {
         .N = 3,
         .max_roll_deg = 35,
         .attack_angle_deg = 20,
-        .attack_factor = 2,
+        .attack_factor = 0.02,
     },
     .pitcher = {
         .kp = 0.1,

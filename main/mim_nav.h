@@ -4,8 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <lwip/ip4_addr.h>
 
-#include "libcrsf_payload.h"
-#include "skymap.pb.h"
+#include "mim_conn.h"
 #include "nav.h"
 
 #ifdef __cplusplus
@@ -14,7 +13,6 @@ extern "C" {
 
 typedef enum {
     MIM_NAV_STATUS_READY_TO_ENGAGE,
-    MIM_NAV_STATUS_ERROR_CONNECTION,
     MIM_NAV_STATUS_ERROR_TARGET_POSITION,
     MIM_NAV_STATUS_ERROR_INTERCEPTOR_POSITION,
 } mim_nav_status_t;
@@ -24,38 +22,6 @@ typedef enum {
     MIM_NAV_ESTIMATE_STATUS_SKYMAP,
     MIM_NAV_ESTIMATE_STATUS_CRSF,
 } mim_nav_estimate_status_t;
-
-typedef enum {
-    MIM_NAV_CRSF_SUBSET_TYPE_GPS,
-    MIM_NAV_CRSF_SUBSET_TYPE_BAROALT,
-    MIM_NAV_CRSF_SUBSET_TYPE_VARIO,
-    MIM_NAV_CRSF_SUBSET_TYPE_AIRSPEED,
-} mim_nav_crsf_subset_type_t;
-
-typedef struct {
-    mim_nav_crsf_subset_type_t type;
-    union {
-        crsf_payload_gps_t gps;
-        crsf_payload_baro_altitude_t alt;
-        crsf_payload_vario_t vario;
-        crsf_payload_airspeed_t airspeed;
-    } message;
-} mim_nav_crsf_subset_t;
-
-typedef enum {
-    MIM_NAV_MSG_TYPE_SERVER,
-    MIM_NAV_MSG_TYPE_CLIENT,
-    MIM_NAV_MSG_TYPE_CRSF,
-} mim_nav_msg_type_t;
-
-typedef struct {
-    mim_nav_msg_type_t type;
-    union {
-        ai_skyfortress_guidance_ServerMessage server;
-        ai_skyfortress_guidance_ClientMessage client;
-        mim_nav_crsf_subset_t crsf;
-    } message;
-} mim_nav_msg_t;
 
 typedef enum {
     MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_STATUS = 0x6000,
@@ -69,14 +35,12 @@ typedef enum {
 
 typedef struct mim_nav_ctx_s *mim_nav_handle_t;
 
-esp_err_t mim_nav_init(BaseType_t core, UBaseType_t priority, mim_nav_handle_t *handle);
-
+esp_err_t mim_nav_init(mim_nav_handle_t *handle);
 esp_err_t mim_nav_deinit(mim_nav_handle_t handle);
 
-ip4_addr_t mim_nav_get_ip_address(const mim_nav_handle_t handle);
-ip4_addr_t mim_nav_get_skymap_ip_address(const mim_nav_handle_t handle);
+int64_t mim_nav_last_message_time(mim_nav_handle_t handle);
 
-void mim_nav_enqueue(mim_nav_handle_t handle, const mim_nav_msg_t *msg);
+void mim_nav_on_message(mim_conn_handle_t conn, int64_t timestamp_us, const mim_conn_msg_t *msg, void *arg);
 
 mim_nav_estimate_status_t mim_nav_target_status(const mim_nav_handle_t handle);
 mim_nav_estimate_status_t mim_nav_interceptor_status(const mim_nav_handle_t handle);

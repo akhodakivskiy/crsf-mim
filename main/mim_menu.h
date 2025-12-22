@@ -2,6 +2,7 @@
 #define MIM_MENU_H
 
 #include "libcrsf_device.h"
+#include "mim_conn.h"
 #include "mim_nav.h"
 #include <lwip/ip4_addr.h>
 
@@ -9,7 +10,7 @@
 extern "C" {
 #endif
 
-void mim_menu_init(crsf_device_t *device, mim_nav_handle_t nav);
+void mim_menu_init(crsf_device_t *device, mim_nav_handle_t nav, mim_conn_handle_t conn);
 
 #ifdef __cplusplus
 }

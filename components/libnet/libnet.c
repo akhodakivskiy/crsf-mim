@@ -4,29 +4,29 @@
 #include "esp_wifi_default.h"
 #include "freertos/projdefs.h"
 
-#include <esp_wifi.h>
+#include <driver/gpio.h>
+#include <driver/spi_master.h>
 #include <esp_eth.h>
 #include <esp_eth_driver.h>
-#include <esp_netif.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_mac.h>
+#include <esp_netif.h>
+#include <esp_wifi.h>
+#include <lwip/err.h>
 #include <lwip/ip4_addr.h>
 #include <lwip/ip_addr.h>
-#include <nvs_flash.h>
-#include <lwip/err.h>
-#include <lwip/sys.h>
 #include <lwip/sockets.h>
-#include <driver/spi_master.h>
-#include <driver/gpio.h>
+#include <lwip/sys.h>
+#include <nvs_flash.h>
 #include <sdkconfig.h>
 
-static const char* TAG = "LIBNET";
+static const char *TAG = "LIBNET";
 
 struct libnet_ctx_s {
     libnet_config_t config;
 
-    esp_netif_t* netif;
+    esp_netif_t *netif;
     union {
         struct {
         } wifi;
@@ -49,20 +49,21 @@ struct libnet_ctx_s {
 };
 
 // Forward declarations
-static void _wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-static void _eth_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-static void _ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-static void _udp_server_task(void* pvParameters);
+static void _wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+static void _eth_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+static void _ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+static void _udp_server_task(void *pvParameters);
 static esp_err_t _init_wifi(libnet_handle_t h);
 static esp_err_t _init_ethernet(libnet_handle_t h);
 
-esp_err_t libnet_init(const libnet_config_t* config, libnet_handle_t *handle) {
+esp_err_t libnet_init(const libnet_config_t *config, libnet_handle_t *handle) {
     if (!config) {
         ESP_LOGE(TAG, "Config is NULL");
         return ESP_ERR_INVALID_ARG;
     }
 
-    libnet_handle_t h = (libnet_handle_t) heap_caps_calloc(1, sizeof(struct libnet_ctx_s), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+    libnet_handle_t h =
+        (libnet_handle_t)heap_caps_calloc(1, sizeof(struct libnet_ctx_s), MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
     memset(h, 0, sizeof(struct libnet_ctx_s));
 
     memcpy(&h->config, config, sizeof(libnet_config_t));
@@ -83,23 +84,25 @@ esp_err_t libnet_init(const libnet_config_t* config, libnet_handle_t *handle) {
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     switch (config->interface) {
-        case LIBNET_INTERFACE_WIFI:
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &_ip_event_handler, h));
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, &_ip_event_handler, h));
-            ESP_ERROR_CHECK(_init_wifi(h));
-            ESP_LOGI(TAG, "Initialized with WiFi interface, ssid=%s", h->config.net.wifi.ssid);
-            break;
-        case LIBNET_INTERFACE_ETHERNET:
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &_ip_event_handler, h));
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, &_ip_event_handler, h));
-            ESP_ERROR_CHECK(_init_ethernet(h));
-            ESP_LOGI(TAG, "Initialized with Ethernet interface");
-            break;
+    case LIBNET_INTERFACE_WIFI:
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &_ip_event_handler, h));
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, &_ip_event_handler, h));
+        ESP_ERROR_CHECK(_init_wifi(h));
+        ESP_LOGI(TAG, "Initialized with WiFi interface, ssid=%s", h->config.net.wifi.ssid);
+        break;
+    case LIBNET_INTERFACE_ETHERNET:
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &_ip_event_handler, h));
+        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, &_ip_event_handler, h));
+        ESP_ERROR_CHECK(_init_ethernet(h));
+        ESP_LOGI(TAG, "Initialized with Ethernet interface");
+        break;
     }
 
     h->initialized = true;
 
     *handle = h;
+
+    ESP_LOGI(TAG, "libnet initialized");
 
     return ESP_OK;
 }
@@ -110,38 +113,37 @@ esp_err_t libnet_deinit(libnet_handle_t h) {
         return ESP_ERR_INVALID_ARG;
     }
 
-
     switch (h->config.interface) {
-        case LIBNET_INTERFACE_WIFI:
-            ESP_ERROR_CHECK(esp_wifi_stop());
+    case LIBNET_INTERFACE_WIFI:
+        ESP_ERROR_CHECK(esp_wifi_stop());
 
-            esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &_ip_event_handler);
-            esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, &_ip_event_handler);
-            esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &_wifi_event_handler);
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &_ip_event_handler);
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, &_ip_event_handler);
+        esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &_wifi_event_handler);
 
-            ESP_ERROR_CHECK(esp_wifi_deinit());
+        ESP_ERROR_CHECK(esp_wifi_deinit());
 
-            esp_netif_destroy_default_wifi(h->netif);
-            break;
-        case LIBNET_INTERFACE_ETHERNET:
-            ESP_ERROR_CHECK(esp_eth_stop(h->net.eth.eth_handle));
-            vTaskDelay(pdMS_TO_TICKS(100));
+        esp_netif_destroy_default_wifi(h->netif);
+        break;
+    case LIBNET_INTERFACE_ETHERNET:
+        ESP_ERROR_CHECK(esp_eth_stop(h->net.eth.eth_handle));
+        vTaskDelay(pdMS_TO_TICKS(100));
 
-            esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_GOT_IP, &_ip_event_handler);
-            esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_LOST_IP, &_ip_event_handler);
-            esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, &_eth_event_handler);
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_GOT_IP, &_ip_event_handler);
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_ETH_LOST_IP, &_ip_event_handler);
+        esp_event_handler_unregister(ETH_EVENT, ESP_EVENT_ANY_ID, &_eth_event_handler);
 
-            ESP_ERROR_CHECK(esp_eth_del_netif_glue(h->net.eth.eth_glue_handle));
-            esp_netif_destroy(h->netif);
-            ESP_ERROR_CHECK(esp_eth_driver_uninstall(h->net.eth.eth_handle));
-            h->net.eth.phy->del(h->net.eth.phy);
-            h->net.eth.mac->del(h->net.eth.mac);
-            ESP_ERROR_CHECK(spi_bus_remove_device(h->net.eth.spi_handle));
-            spi_bus_free(SPI2_HOST);
-            if (h->net.eth.isr_service_installed) {
-                gpio_uninstall_isr_service();
-            }
-            break;
+        ESP_ERROR_CHECK(esp_eth_del_netif_glue(h->net.eth.eth_glue_handle));
+        esp_netif_destroy(h->netif);
+        ESP_ERROR_CHECK(esp_eth_driver_uninstall(h->net.eth.eth_handle));
+        h->net.eth.phy->del(h->net.eth.phy);
+        h->net.eth.mac->del(h->net.eth.mac);
+        ESP_ERROR_CHECK(spi_bus_remove_device(h->net.eth.spi_handle));
+        spi_bus_free(SPI2_HOST);
+        if (h->net.eth.isr_service_installed) {
+            gpio_uninstall_isr_service();
+        }
+        break;
     }
 
     esp_netif_deinit();
@@ -171,7 +173,7 @@ esp_err_t libnet_udp_server_start(libnet_handle_t h, uint16_t port) {
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
 
-    if (bind(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         ESP_LOGE(TAG, "Failed to bind UDP socket to port %d", port);
         close(sock);
         return ESP_FAIL;
@@ -180,7 +182,8 @@ esp_err_t libnet_udp_server_start(libnet_handle_t h, uint16_t port) {
     h->udp_server_socket = sock;
     h->udp_server_running = true;
 
-    xTaskCreatePinnedToCore(_udp_server_task, "task_udp_server", 4096, h, h->config.priority, &h->udp_server_task, h->config.core_id);
+    xTaskCreatePinnedToCore(_udp_server_task, "task_udp_server", 4096, h, h->config.priority, &h->udp_server_task,
+                            h->config.core_id);
     ESP_LOGI(TAG, "UDP server started on port %d", port);
     return ESP_OK;
 }
@@ -207,7 +210,8 @@ esp_err_t libnet_udp_server_stop(libnet_handle_t h) {
     return ESP_OK;
 }
 
-esp_err_t IRAM_ATTR libnet_udp_send(libnet_handle_t h, const ip4_addr_t *dest_ip, uint16_t dest_port, const uint8_t* data, size_t len) {
+esp_err_t IRAM_ATTR libnet_udp_send(libnet_handle_t h, const ip4_addr_t *dest_ip, uint16_t dest_port,
+                                    const uint8_t *data, size_t len) {
     if (!h->connected) {
         ESP_LOGE(TAG, "Not connected");
         return ESP_ERR_INVALID_STATE;
@@ -218,29 +222,24 @@ esp_err_t IRAM_ATTR libnet_udp_send(libnet_handle_t h, const ip4_addr_t *dest_ip
     dest_addr.sin_addr.s_addr = dest_ip->addr;
     dest_addr.sin_port = htons(dest_port);
 
-    int sent = sendto(h->udp_server_socket, data, len, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+    int sent = sendto(h->udp_server_socket, data, len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 
     if (sent < 0) {
         ESP_LOGE(TAG, "Failed to send UDP packet");
         return ESP_FAIL;
     }
 
-
     ESP_LOGD(TAG, "Sent %d bytes to " IPSTR ":%d", sent, IP2STR(dest_ip), dest_port);
     return ESP_OK;
 }
 
-esp_err_t libnet_udp_send_broadcast(libnet_handle_t h, uint16_t dest_port, const uint8_t* data, size_t len) {
+esp_err_t libnet_udp_send_broadcast(libnet_handle_t h, uint16_t dest_port, const uint8_t *data, size_t len) {
     return libnet_udp_send(h, IP4_ADDR_BROADCAST, dest_port, data, len);
 }
 
-bool libnet_is_connected(libnet_handle_t h) {
-    return h->connected;
-}
+bool libnet_is_connected(libnet_handle_t h) { return h->connected; }
 
-void libnet_get_ip_address(libnet_handle_t h, ip4_addr_t *addr) {
-    memcpy(addr, &h->ip_address, sizeof(ip4_addr_t));
-}
+void libnet_get_ip_address(libnet_handle_t h, ip4_addr_t *addr) { memcpy(addr, &h->ip_address, sizeof(ip4_addr_t)); }
 
 /* internal functions implementation */
 
@@ -253,17 +252,15 @@ static esp_err_t _init_wifi(libnet_handle_t h) {
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &_wifi_event_handler, h));
 
     wifi_config_t wifi_config = {
-        .sta = {
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-            .pmf_cfg = {
-                .capable = true,
-                .required = false
+        .sta =
+            {
+                .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+                .pmf_cfg = {.capable = true, .required = false},
             },
-        },
     };
 
-    strcpy((char*)wifi_config.sta.ssid, h->config.net.wifi.ssid);
-    strcpy((char*)wifi_config.sta.password, h->config.net.wifi.password);
+    strcpy((char *)wifi_config.sta.ssid, h->config.net.wifi.ssid);
+    strcpy((char *)wifi_config.sta.password, h->config.net.wifi.password);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -274,8 +271,7 @@ static esp_err_t _init_wifi(libnet_handle_t h) {
 }
 
 static esp_err_t _init_ethernet(libnet_handle_t h) {
-    h->net.eth.isr_service_installed = 
-        (gpio_install_isr_service(0) == ESP_OK);
+    h->net.eth.isr_service_installed = (gpio_install_isr_service(0) == ESP_OK);
 
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
     h->netif = esp_netif_new(&netif_cfg);
@@ -291,14 +287,12 @@ static esp_err_t _init_ethernet(libnet_handle_t h) {
     ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
     // Configure W5500
-    spi_device_interface_config_t devcfg = {
-        .command_bits = 16,
-        .address_bits = 8,
-        .mode = 0,
-        .clock_speed_hz = 12 * 1000 * 1000,
-        .spics_io_num = CONFIG_LIBNET_W5500_SPI_CS,
-        .queue_size = 20
-    };
+    spi_device_interface_config_t devcfg = {.command_bits = 16,
+                                            .address_bits = 8,
+                                            .mode = 0,
+                                            .clock_speed_hz = 12 * 1000 * 1000,
+                                            .spics_io_num = CONFIG_LIBNET_W5500_SPI_CS,
+                                            .queue_size = 20};
 
     ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &devcfg, &h->net.eth.spi_handle));
 
@@ -343,9 +337,8 @@ static esp_err_t _init_ethernet(libnet_handle_t h) {
     return ESP_OK;
 }
 
-
 // Event handlers
-static void _wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+static void _wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     libnet_handle_t h = (libnet_handle_t)arg;
 
     static uint16_t retry_num = 0;
@@ -367,7 +360,7 @@ static void _wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t 
     }
 }
 
-static void _eth_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+static void _eth_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     libnet_handle_t h = (libnet_handle_t)arg;
 
     if (event_id == ETHERNET_EVENT_CONNECTED) {
@@ -382,35 +375,35 @@ static void _eth_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-static void _ip_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
+static void _ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     libnet_handle_t h = (libnet_handle_t)arg;
 
     switch (event_id) {
-        case IP_EVENT_STA_GOT_IP:
-        case IP_EVENT_ETH_GOT_IP: {
-            ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-            ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
-            h->connected = true;
-            ip4_addr_set_u32(&h->ip_address, event->ip_info.ip.addr);
-            if (h->config.callbacks.connected) {
-                h->config.callbacks.connected(h->config.user_ctx, &h->ip_address);
-            }
-            break;
+    case IP_EVENT_STA_GOT_IP:
+    case IP_EVENT_ETH_GOT_IP: {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+        h->connected = true;
+        ip4_addr_set_u32(&h->ip_address, event->ip_info.ip.addr);
+        if (h->config.callbacks.connected) {
+            h->config.callbacks.connected(h->config.user_ctx, &h->ip_address);
         }
-        case IP_EVENT_STA_LOST_IP:
-        case IP_EVENT_ETH_LOST_IP: {
-            ESP_LOGI(TAG, "Lost IP");
-            h->connected = false;
-            ip4_addr_set_u32(&h->ip_address, 0);
-            if (h->config.callbacks.disconnected) {
-                h->config.callbacks.disconnected(h->config.user_ctx);
-            }
-            break;
+        break;
+    }
+    case IP_EVENT_STA_LOST_IP:
+    case IP_EVENT_ETH_LOST_IP: {
+        ESP_LOGI(TAG, "Lost IP");
+        h->connected = false;
+        ip4_addr_set_u32(&h->ip_address, 0);
+        if (h->config.callbacks.disconnected) {
+            h->config.callbacks.disconnected(h->config.user_ctx);
         }
+        break;
+    }
     }
 }
 
-static void _udp_server_task(void* arg) {
+static void _udp_server_task(void *arg) {
     libnet_handle_t h = (libnet_handle_t)arg;
 
     struct sockaddr_in client_addr;
@@ -419,23 +412,19 @@ static void _udp_server_task(void* arg) {
     uint8_t packet_data[LIBNET_MAX_PACKET_SIZE];
 
     while (h->udp_server_running) {
-        int packet_len = recvfrom(h->udp_server_socket, 
-                                  packet_data, 
-                                  LIBNET_MAX_PACKET_SIZE, 
-                                  0,
-                                  (struct sockaddr*)&client_addr, 
-                                  &client_addr_len);
+        int packet_len = recvfrom(h->udp_server_socket, packet_data, LIBNET_MAX_PACKET_SIZE, 0,
+                                  (struct sockaddr *)&client_addr, &client_addr_len);
 
         if (packet_len > 0) {
-            //packet.len = received;
-            //packet.src_ip = client_addr.sin_addr.s_addr;
-            //packet.src_port = ntohs(client_addr.sin_port);
+            // packet.len = received;
+            // packet.src_ip = client_addr.sin_addr.s_addr;
+            // packet.src_port = ntohs(client_addr.sin_port);
 
             ip4_addr_t ip;
             ip4_addr_set_u32(&ip, client_addr.sin_addr.s_addr);
             uint16_t port = ntohs(client_addr.sin_port);
 
-            //ESP_LOGI(TAG, "Received %d bytes from " IPSTR ": %u", packet_len, IP2STR(&ip), port);
+            // ESP_LOGI(TAG, "Received %d bytes from " IPSTR ": %u", packet_len, IP2STR(&ip), port);
 
             if (h->config.callbacks.packet) {
                 h->config.callbacks.packet(h->config.user_ctx, packet_data, packet_len, &ip, port);
