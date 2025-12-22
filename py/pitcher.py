@@ -58,7 +58,6 @@ class Pitcher:
         max_delta = self.max_pitch_rate * dt
         pitch_delta = np.clip(pitch_delta, -max_delta, max_delta)
 
-
         # New pitch command
         pitch_cmd = last_pitch + pitch_delta
 
