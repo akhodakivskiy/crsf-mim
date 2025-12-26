@@ -23,16 +23,6 @@ typedef enum {
     MIM_NAV_ESTIMATE_STATUS_CRSF,
 } mim_nav_estimate_status_t;
 
-typedef enum {
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_STATUS = 0x6000,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_LAT = 0x6001,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ACCEL_VER = 0x6002,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_HOR = 0x6003,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_DIST_VER = 0x6004,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_ZEM = 0x6005,
-    MIM_NAV_CRSF_ARDUPILOT_PAYLOAD_APPID_TTGO = 0x6006,
-} mim_nav_crsf_ardupilot_payload_appid_t;
-
 typedef struct mim_nav_ctx_s *mim_nav_handle_t;
 
 esp_err_t mim_nav_init(mim_nav_handle_t *handle);

@@ -11,13 +11,44 @@ local APPID_DIST_HOR = 0x6003
 local APPID_DIST_VER = 0x6004
 local APPID_ZEM = 0x6005
 local APPID_TTGO = 0x6006
+local APPID_ADDR_MIM = 0x6007
+local APPID_ADDR_SKYMAP = 0x6008
 
 local function doGarbageCollect()
   collectgarbage()
   collectgarbage()
 end
 
-local function processTelemetry(tel, appid, value)
+local function telemInit()
+  return {
+    is_connected = 0,
+    is_engaging = 0,
+    is_target_ready = 0,
+    is_ceptor_ready = 0,
+    is_location_ready = 0,
+    command_type = 0,
+    accel_lat = 0,
+    accel_ver = 0,
+    dist_hor = 0,
+    dist_ver = 0,
+    time_to_go = 0,
+    zero_effort_miss = 0,
+    addr_mim = "0.0.0.0",
+    addr_skymap = "0.0.0.0",
+  }
+end
+
+local function formatIpAddress(value)
+  return string.format(
+    "%d.%d.%d.%d",
+    bit32.band(bit32.rshift(value, 24), 256),
+    bit32.band(bit32.rshift(value, 16), 256),
+    bit32.band(bit32.rshift(value, 8), 256),
+    bit32.band(value, 24, 256)
+  )
+end
+
+local function telemProcess(tel, appid, value)
   if appid == APPID_STATUS then
     tel.is_connected = bit32.band(value, 1)
     tel.is_engaging = bit32.band(bit32.rshift(value, 1), 1)
@@ -48,6 +79,10 @@ local function processTelemetry(tel, appid, value)
   elseif appid == APPID_TTGO then
     tel.time_to_go = value
     setTelemetryValue(APPID_TTGO, 0, 0, value, 37, 0, "_tgo")
+  elseif appid == APPID_ADDR_MIM then
+    tel.addr_mim = formatIpAddress(value)
+  elseif appid == APPID_ADDR_SKYMAP then
+    tel.addr_skymap = formatIpAddress(value)
   end
 end
 
@@ -58,20 +93,12 @@ local function crossfirePop(tel)
     return false
   end
 
-  if
-    (
-      command == CRSF_FRAME_CUSTOM_TELEM
-      or command == CRSF_FRAME_CUSTOM_TELEM_LEGACY
-    ) and data ~= nil
-  then
+  if (command == CRSF_FRAME_CUSTOM_TELEM or command == CRSF_FRAME_CUSTOM_TELEM_LEGACY) and data ~= nil then
     -- actual payload starts at data[2]
     if #data >= 7 and data[1] == CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_SINGLE then
       local appid = bit32.lshift(data[3], 8) + data[2]
-      local value = bit32.lshift(data[7], 24)
-        + bit32.lshift(data[6], 16)
-        + bit32.lshift(data[5], 8)
-        + data[4]
-      processTelemetry(tel, appid, value)
+      local value = bit32.lshift(data[7], 24) + bit32.lshift(data[6], 16) + bit32.lshift(data[5], 8) + data[4]
+      telemProcess(tel, appid, value)
     elseif #data >= 8 and data[1] == CRSF_PAYLOAD_ARDUPILOT_SUBTYPE_MULTI then
       -- passthrough array
       local appid, value
@@ -82,7 +109,7 @@ local function crossfirePop(tel)
           + bit32.lshift(data[7 + (6 * i)], 16)
           + bit32.lshift(data[6 + (6 * i)], 8)
           + data[5 + (6 * i)]
-        processTelemetry(tel, appid, value)
+        telemProcess(tel, appid, value)
       end
     end
   end
@@ -186,20 +213,7 @@ local function mim_create(zone, options)
     options = options,
     message = nil,
 
-    tel = {
-      is_connected = 0,
-      is_engaging = 0,
-      is_target_ready = 0,
-      is_ceptor_ready = 0,
-      is_location_ready = 0,
-      command_type = 0,
-      accel_lat = 0,
-      accel_ver = 0,
-      dist_hor = 0,
-      dist_ver = 0,
-      time_to_go = 0,
-      zero_effort_miss = 0,
-    },
+    tel = telemInit(),
   }
 end
 

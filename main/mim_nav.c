@@ -4,7 +4,6 @@
 #include "mim_conn.h"
 #include "mim_rc.h"
 #include "mim_settings.h"
-#include "mim_uart.h"
 #include "nav.h"
 #include "nav_pitcher.h"
 

@@ -6,6 +6,7 @@ idf_component_register(
     "mim_conn.c"
     "mim_nav.c"
     "mim_rc.c" 
+    "mim_telem.c" 
     "main.c" 
   INCLUDE_DIRS "."
   REQUIRES 
