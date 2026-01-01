@@ -48,6 +48,16 @@ local function formatIpAddress(value)
   )
 end
 
+local function formatCmdType(value)
+  if value == 0 then
+    return "none"
+  elseif value == 1 then
+    return "pursuit"
+  elseif value == 2 then
+    return "pronav"
+  end
+end
+
 local function telemProcess(tel, appid, value)
   if appid == APPID_STATUS then
     tel.is_connected = bit32.band(value, 1)
@@ -136,7 +146,7 @@ local function mim_run(event)
 
   -- left column
 
-  text = string.format("skymap: %s", tel.is_connected ~= 0 and "+" or "-")
+  text = string.format("connected: %s", tel.is_connected ~= 0 and "+" or "-")
   lcd.drawText(1, 11 + h * 0, text, SMLSIZE)
 
   text = string.format("engaging: %s", tel.is_engaging ~= 0 and "+" or "-")
@@ -151,7 +161,7 @@ local function mim_run(event)
   text = string.format("i-loc: %s", tel.is_location_ready ~= 0 and "+" or "-")
   lcd.drawText(1, 11 + h * 4, text, SMLSIZE)
 
-  text = string.format("cmd: %s", tel.command_type == 0 and "none" or (tel.command_type == 1 and "pursuit" or "pronav"))
+  text = string.format("cmd: %s", formatCmdType(tel.command_type))
   lcd.drawText(1, 11 + h * 5, text, SMLSIZE)
 
   -- right column

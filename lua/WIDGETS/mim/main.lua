@@ -41,11 +41,21 @@ end
 local function formatIpAddress(value)
   return string.format(
     "%d.%d.%d.%d",
-    bit32.band(bit32.rshift(value, 24), 256),
-    bit32.band(bit32.rshift(value, 16), 256),
-    bit32.band(bit32.rshift(value, 8), 256),
-    bit32.band(value, 24, 256)
+    bit32.band(value, 255),
+    bit32.band(bit32.rshift(value, 8), 255),
+    bit32.band(bit32.rshift(value, 16), 255),
+    bit32.band(bit32.rshift(value, 24), 255)
   )
+end
+
+local function formatCmdType(value)
+  if value == 0 then
+    return "none"
+  elseif value == 1 then
+    return "pursuit"
+  elseif value == 2 then
+    return "pronav"
+  end
 end
 
 local function telemProcess(tel, appid, value)
@@ -128,10 +138,12 @@ local function drawWidget(widget)
   local text = "---------------------"
   local w, h = lcd.sizeText(text, 0 + SMLSIZE)
 
-  text = "Man in the Middle"
+  text = string.format("CRSF MiM | %s", tel.addr_mim)
   lcd.drawText(1, 0, text, 0 + CUSTOM_COLOR + SMLSIZE)
 
-  text = string.format("skymap: %s", tel.is_connected ~= 0 and "+" or "-")
+  -- left column
+
+  text = string.format("connected: %s", tel.is_connected ~= 0 and "+" or "-")
   lcd.drawText(1, h * 1, text, 0 + CUSTOM_COLOR + SMLSIZE)
 
   text = string.format("engaging: %s", tel.is_engaging ~= 0 and "+" or "-")
@@ -146,13 +158,7 @@ local function drawWidget(widget)
   text = string.format("i-loc: %s", tel.is_location_ready ~= 0 and "+" or "-")
   lcd.drawText(1, h * 5, text, 0 + CUSTOM_COLOR + SMLSIZE)
 
-  cmd_str = "none"
-  if tel.command_type == 1 then
-    cmd_str = "pursuit"
-  elseif tel.command_type == 2 then
-    cmd_str = "pronav"
-  end
-  text = string.format("cmd: %s", cmd_str)
+  text = string.format("cmd: %s", formatCmdType(tel.command_type))
   lcd.drawText(1, h * 6, text, 0 + CUSTOM_COLOR + SMLSIZE)
 
   -- right column
