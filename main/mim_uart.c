@@ -21,6 +21,9 @@
 static const char *TAG = "MIM_UART";
 
 #define MIM_UART_EVENT_TIMER UART_EVENT_MAX + 1
+#define MIM_UART_BUFFER_SIZE_RX 512
+#define MIM_UART_BUFFER_SIZE_TX 512
+#define MIM_UART_TX_TIMEOUT_US 20000
 
 #define MIM_UART_WDT_TIMEOUT 1000000     // 1 second
 #define MIM_UART_AUTOBAUD_TIMEOUT 500000 // 500 milliseconds
@@ -29,8 +32,6 @@ static const int32_t MIM_UART_PACKET_RATES[] = {250, 62, 500, 500, 500, 500, 250
 
 #define MIM_GPIO_CONTROLLER_TX GPIO_NUM_34
 #define MIM_GPIO_MODULE_TX GPIO_NUM_33
-#define MIM_GPIO_MODULE_DATA_INTR GPIO_NUM_35
-#define MIM_GPIO_CONTROLLER_DATA_INTR GPIO_NUM_36
 
 static bool _is_init = false;
 
@@ -63,21 +64,10 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
 static void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin);
 static void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin);
 static bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *frame);
-static void _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
-// static void _task_crsf_controller_impl(void *arg);
-// static void _task_crsf_module_impl(void *arg);
+static bool _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame);
 static void _task_crsf_impl(void *arg);
 static void _uart_wdt(util_lqcalc_t *lq_calc);
 static uint32_t _autobaud();
-
-/*
-static bool _crsf_handle_timing_correction(crsf_frame_t *frame, uint32_t *period_us, int32_t *offset_us);
-static uint32_t _crsf_get_frame_time_on_wire_us(const crsf_frame_t *frame);
-
-static void _timer_init(gptimer_handle_t *timer, uint64_t period_us, QueueHandle_t queue);
-static void _timer_set_period(gptimer_handle_t timer, uint32_t period_us, int32_t offset_us);
-static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx);
-*/
 
 void mim_uart_init(const mim_uart_config_t *cfg) {
     assert(!_is_init);
@@ -100,8 +90,6 @@ void mim_uart_init(const mim_uart_config_t *cfg) {
 
     gpio_set_direction(MIM_GPIO_CONTROLLER_TX, GPIO_MODE_OUTPUT);
     gpio_set_direction(MIM_GPIO_MODULE_TX, GPIO_MODE_OUTPUT);
-    gpio_set_direction(MIM_GPIO_MODULE_DATA_INTR, GPIO_MODE_OUTPUT);
-    gpio_set_direction(MIM_GPIO_CONTROLLER_DATA_INTR, GPIO_MODE_OUTPUT);
 
     assert(xTaskCreatePinnedToCore(_task_crsf_impl, "task_crsf", 4096, NULL, cfg->priority, NULL, cfg->core) == pdPASS);
 
@@ -114,6 +102,7 @@ void mim_uart_set_module_handler(mim_uart_handler handler) { _module_s.handler =
 
 void IRAM_ATTR mim_uart_enqueue_module_frame(const crsf_frame_t *frame) {
     assert(_is_init);
+
     if (xQueueSend(_module_s.queue_out, frame, 0) != pdPASS) {
         ESP_LOGE(TAG, "failed to enqueue module frame, type=%x, length=%u", frame->type, frame->length);
     }
@@ -136,7 +125,8 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
 
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(port, pin, pin, -1, -1));
-    ESP_ERROR_CHECK(uart_driver_install(port, 256, 256, 10, queue, ESP_INTR_FLAG_LEVEL3));
+    ESP_ERROR_CHECK(
+        uart_driver_install(port, MIM_UART_BUFFER_SIZE_TX, MIM_UART_BUFFER_SIZE_TX, 10, queue, ESP_INTR_FLAG_LEVEL3));
 
     if (queue != NULL) {
         uint32_t uart_intr_mask = UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT;
@@ -153,32 +143,32 @@ static void _uart_init_port(uart_port_t port, gpio_num_t pin, QueueHandle_t *que
 }
 
 static IRAM_ATTR void _uart_half_duplex_set_tx(uart_port_t port, gpio_num_t pin) {
-    ESP_ERROR_CHECK(gpio_set_pull_mode(pin, GPIO_FLOATING));
-    ESP_ERROR_CHECK(gpio_set_level(pin, 0));
-    ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_OUTPUT));
+    gpio_set_pull_mode(pin, GPIO_FLOATING);
+    gpio_set_level(pin, 0);
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
     esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ZERO_INPUT, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), false);
     esp_rom_gpio_connect_out_signal(pin, UART_PERIPH_SIGNAL(port, SOC_UART_TX_PIN_IDX), true, false);
 }
 
 static IRAM_ATTR void _uart_half_duplex_set_rx(uart_port_t port, gpio_num_t pin) {
-    ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_INPUT));
+    gpio_set_direction(pin, GPIO_MODE_INPUT);
     // gpio_matrix_in(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
     esp_rom_gpio_connect_in_signal(pin, UART_PERIPH_SIGNAL(port, SOC_UART_RX_PIN_IDX), true);
-    ESP_ERROR_CHECK(gpio_set_pull_mode(pin, GPIO_PULLDOWN_ONLY));
+    gpio_set_pull_mode(pin, GPIO_PULLDOWN_ONLY);
 
     // flush input and queue before receiving
-    ESP_ERROR_CHECK(uart_flush_input(port));
+    uart_flush_input(port);
 }
 
 static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *frame) {
     bool result = false;
-    uint8_t buff[256];
+    static uint8_t buff[256];
 
     size_t len_buffer = 0;
 
     frame->type = CRSF_FRAME_TYPE_NONE;
 
-    ESP_ERROR_CHECK(uart_get_buffered_data_len(port, &len_buffer));
+    uart_get_buffered_data_len(port, &len_buffer);
     if (len_buffer > 0) {
         size_t len_read = uart_read_bytes(port, buff, len_buffer, portMAX_DELAY);
 
@@ -192,7 +182,7 @@ static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *fram
                 result = true;
                 break;
             } else if (err != CRSF_PARSE_RESULT_NEED_MORE_DATA) {
-                ESP_LOG_BUFFER_HEX(TAG, (uint8_t *)buff, len_read);
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, (uint8_t *)buff, len_read, ESP_LOG_ERROR);
                 ESP_LOGE(TAG,
                          "crsf port=%u [parser error=%u, state=%u], [buffer len=%u, read=%u]",
                          port,
@@ -210,127 +200,27 @@ static IRAM_ATTR bool _uart_read_crsf_frame(uart_port_t port, crsf_frame_t *fram
     return result;
 }
 
-void IRAM_ATTR _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame) {
+bool IRAM_ATTR _uart_write_crsf_frame(uart_port_t port, crsf_frame_t *frame) {
+    int size_written = 0;
+
     uint8_t header[3] = {frame->sync, frame->length, frame->type};
-    assert(uart_write_bytes(port, header, 3) == 3);
+    size_written = uart_write_bytes(port, header, 3);
+    if (size_written != 3) {
+        ESP_LOGW(TAG, "failed to write to port %u: frame header", port);
+        return false;
+    }
+
     if (frame->length > 1) {
+        // frame body less the type byte
         int size_written = uart_write_bytes(port, frame->data, frame->length - 1);
-        assert(size_written == (frame->length - 1));
-    }
-}
-
-/*
-static void IRAM_ATTR _task_crsf_controller_impl(void *arg) {
-    ESP_LOGI(TAG, "crsf controller task started");
-
-    QueueHandle_t queue_uart;
-    util_lqcalc_t lq_calc = {0};
-    uart_event_t event = {0};
-    crsf_frame_t frame = {0};
-    bool tx_pending = false;
-
-    util_lqcalc_init(&lq_calc, 100);
-    util_lqcalc_reset_100(&lq_calc);
-
-    _uart_init_port(_controller_s.port, _controller_s.pin, &queue_uart);
-    _uart_half_duplex_set_rx(_controller_s.port, _controller_s.pin);
-
-    while (true) {
-        _uart_wdt(&lq_calc);
-
-        if (xQueueReceive(queue_uart, &event, pdMS_TO_TICKS(20)) == pdTRUE) {
-            gpio_set_level(MIM_GPIO_CONTROLLER_DATA_INTR, 1);
-            util_lqcalc_prepare(&lq_calc);
-            if (event.type == UART_DATA) {
-                // Send (N-1) response to the controller
-                if (xQueueReceive(_module_s.queue_out, &frame, 0)) {
-                    gpio_set_level(MIM_GPIO_CONTROLLER_TX, 1);
-                    _uart_half_duplex_set_tx(_controller_s.port, _controller_s.pin);
-                    _uart_write_crsf_frame(_controller_s.port, &frame);
-                    tx_pending = true;
-                }
-
-                // Read and handle (N) request from the controller
-                if (_uart_read_crsf_frame(_controller_s.port, &frame)) {
-                    util_lqcalc_receive(&lq_calc);
-
-                    if (_controller_s.handler != NULL) {
-                        _controller_s.handler(&frame);
-                    }
-
-                    assert(xQueueOverwrite(_controller_s.queue_out, &frame) == pdTRUE);
-                }
-
-                // Wait for (N-1) response to be fully written
-                if (tx_pending) {
-                    ESP_ERROR_CHECK(uart_wait_tx_done(_controller_s.port, portMAX_DELAY));
-                    _uart_half_duplex_set_rx(_controller_s.port, _controller_s.pin);
-                    gpio_set_level(MIM_GPIO_CONTROLLER_TX, 0);
-                    tx_pending = false;
-                }
-            }
-            gpio_set_level(MIM_GPIO_CONTROLLER_DATA_INTR, 0);
+        if (size_written != (frame->length - 1)) {
+            ESP_LOGW(TAG, "failed to write to port %u: frame body len=%u", port, frame->length);
+            return false;
         }
     }
+
+    return true;
 }
-
-
-static void IRAM_ATTR _task_crsf_module_impl(void *arg) {
-    ESP_LOGI(TAG, "crsf module task started");
-
-    crsf_frame_t frame = {0};
-
-    QueueHandle_t queue_uart = NULL;
-    uart_event_t event = {0};
-
-    _uart_init_port(_module_s.port, _module_s.pin, &queue_uart);
-    _uart_half_duplex_set_rx(_module_s.port, _module_s.pin);
-
-    gptimer_handle_t timer;
-
-    _timer_init(&timer, _timing_s.period_us, queue_uart);
-
-    while (true) {
-        if (xQueueReceive(queue_uart, &event, portMAX_DELAY)) {
-            if (event.type == MIM_UART_EVENT_TIMER) {
-
-                //ESP_LOGI(TAG, "timer %lli", esp_timer_get_time());
-
-                // Forward request to the module
-                if (xQueueReceive(_controller_s.queue_out, &frame, 0)) {
-
-                    gpio_set_level(MIM_GPIO_MODULE_TX, 1);
-                    _uart_half_duplex_set_tx(_module_s.port, _module_s.pin);
-                    _uart_write_crsf_frame(_module_s.port, &frame);
-                    ESP_ERROR_CHECK(uart_wait_tx_done(_module_s.port, portMAX_DELAY));
-                    _uart_half_duplex_set_rx(_module_s.port, _module_s.pin);
-                    gpio_set_level(MIM_GPIO_MODULE_TX, 0);
-                }
-            } else if (event.type == UART_DATA) {
-                gpio_set_level(MIM_GPIO_MODULE_DATA_INTR, 1);
-                // Read response from module
-                if (_uart_read_crsf_frame(_module_s.port, &frame)) {
-                    if (esp_timer_get_time() - _timing_s.last_correction_time > 200000) {
-                        int32_t offset_us = 0;
-                        if (_crsf_handle_timing_correction(&frame, &_timing_s.period_us, &offset_us)) {
-                            _timing_s.last_correction_time = esp_timer_get_time();
-                            _timer_set_period(timer, _timing_s.period_us, offset_us);
-                        }
-                    }
-
-                    if (_module_s.handler != NULL) {
-                        _module_s.handler(&frame);
-                    }
-
-                    assert(xQueueSend(_module_s.queue_out, &frame, 0) == pdTRUE);
-                }
-
-                gpio_set_level(MIM_GPIO_MODULE_DATA_INTR, 0);
-            }
-        }
-    }
-}
-*/
 
 static void IRAM_ATTR _task_crsf_impl(void *arg) {
     ESP_LOGI(TAG, "crsf task started");
@@ -369,8 +259,7 @@ static void IRAM_ATTR _task_crsf_impl(void *arg) {
                 if (xQueueReceive(_controller_s.queue_out, &frame_to_module, 0)) {
                     gpio_set_level(MIM_GPIO_MODULE_TX, 1);
                     _uart_half_duplex_set_tx(_module_s.port, _module_s.pin);
-                    _uart_write_crsf_frame(_module_s.port, &frame_to_module);
-                    module_tx_pending = true;
+                    module_tx_pending = _uart_write_crsf_frame(_module_s.port, &frame_to_module);
                 }
 
                 // receive previous module frame (N-1)
@@ -381,8 +270,7 @@ static void IRAM_ATTR _task_crsf_impl(void *arg) {
                 if (xQueueReceive(_module_s.queue_out, &frame_to_controller, 0)) {
                     gpio_set_level(MIM_GPIO_CONTROLLER_TX, 1);
                     _uart_half_duplex_set_tx(_controller_s.port, _controller_s.pin);
-                    _uart_write_crsf_frame(_controller_s.port, &frame_to_controller);
-                    controller_tx_pending = true;
+                    controller_tx_pending = _uart_write_crsf_frame(_controller_s.port, &frame_to_controller);
                 }
 
                 // receive current frame from controller (N)
@@ -390,7 +278,7 @@ static void IRAM_ATTR _task_crsf_impl(void *arg) {
 
                 if (module_tx_pending) {
                     // Wait for TX done on module
-                    ESP_ERROR_CHECK(uart_wait_tx_done(_module_s.port, portMAX_DELAY));
+                    uart_wait_tx_done(_module_s.port, portMAX_DELAY);
                     _uart_half_duplex_set_rx(_module_s.port, _module_s.pin);
                     gpio_set_level(MIM_GPIO_MODULE_TX, 0);
                     module_tx_pending = false;
@@ -398,7 +286,7 @@ static void IRAM_ATTR _task_crsf_impl(void *arg) {
 
                 // Wait for TX done on controller
                 if (controller_tx_pending) {
-                    ESP_ERROR_CHECK(uart_wait_tx_done(_controller_s.port, portMAX_DELAY));
+                    uart_wait_tx_done(_controller_s.port, portMAX_DELAY);
                     _uart_half_duplex_set_rx(_controller_s.port, _controller_s.pin);
                     gpio_set_level(MIM_GPIO_CONTROLLER_TX, 0);
                     controller_tx_pending = false;
@@ -541,86 +429,3 @@ static uint32_t IRAM_ATTR _autobaud() {
 #endif
     return result;
 }
-
-/*
-
-static bool _crsf_handle_timing_correction(crsf_frame_t *frame, uint32_t *period_us, int32_t *offset_us) {
-    crsf_payload_timing_correction_t p;
-    if (crsf_payload_unpack__timing_correction(frame, &p)) {
-        *offset_us = (p.offset_100ns / 10);
-        *period_us = (p.interval_100ns / 10);
-
-        //crsf_payload_modify__timing_correction(frame, p.interval_100ns, 0);
-
-        return true;
-    }
-    return false;
-}
-
-static uint32_t _crsf_get_frame_time_on_wire_us(const crsf_frame_t *frame) {
-    return ((frame->length + 2) * 10000000) / MIM_UART_BAUD_RATES[_autobaud_s.idx];
-}
-
-static void _timer_init(gptimer_handle_t *timer, uint64_t period_us, QueueHandle_t queue) {
-    gptimer_config_t cfg = {
-        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-        .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = 1000000, // 1us
-    };
-
-    gptimer_alarm_config_t alarm_cfg = {
-        .alarm_count = period_us,
-        .reload_count = 0,
-        .flags = { .auto_reload_on_alarm = true }
-    };
-
-    gptimer_event_callbacks_t callback = {
-        .on_alarm = _timer_isr
-    };
-
-    ESP_ERROR_CHECK(gptimer_new_timer(&cfg, timer));
-
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(*timer, &alarm_cfg));
-
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(*timer, &callback, queue));
-
-    ESP_ERROR_CHECK(gptimer_enable(*timer));
-
-    ESP_ERROR_CHECK(gptimer_start(*timer));
-}
-
-static void _timer_set_period(gptimer_handle_t timer, uint32_t period_us, int32_t offset_us) {
-    uint32_t count_alarm = period_us + offset_us;
-
-    gptimer_alarm_config_t alarm_cfg = {
-        .alarm_count = count_alarm,
-        .reload_count = 0,
-        .flags = { .auto_reload_on_alarm = true }
-    };
-
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(timer, &alarm_cfg));
-
-    if (abs(offset_us) > 50) {
-        ESP_LOGI(TAG, "timing correction period=%lu, offset=%li, next_alarm=%lu", period_us, offset_us, count_alarm);
-    }
-}
-
-static bool _timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx) {
-    QueueHandle_t queue = (QueueHandle_t)user_ctx;
-
-    if (edata->alarm_value != _timing_s.period_us) {
-        _timer_set_period(timer, _timing_s.period_us, 0);
-    }
-
-    uart_event_t e = {
-        .type = MIM_UART_EVENT_TIMER,
-        .size = 0,
-        .timeout_flag = false
-    };
-
-    BaseType_t result = pdFALSE;
-    xQueueSendFromISR(queue, &e, &result);
-    return result;
-}
-
-*/
