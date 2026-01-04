@@ -1,22 +1,28 @@
 idf_component_register(
-  SRCS 
-    "mim_menu.c" 
+  SRCS
+    "main.c"
+    "mim_menu.c"
     "mim_uart.c"
-    "mim_settings.c"
-    "mim_conn.c"
-    "mim_nav.c"
-    "mim_rc.c" 
-    "mim_telem.c" 
-    "main.c" 
-  INCLUDE_DIRS "."
-  REQUIRES 
-    esp_driver_gptimer 
-    esp_driver_uart 
-    esp_driver_gpio 
+    "mim_telem.c"
+    "mim_uart.c"
 
-    async_logging
-    util
-    libcrsf 
-    libnet 
-    nav
-    skymap)
+# Add panel sources if enabled
+   INCLUDE_DIRS "."
+   REQUIRES
+     async_logging
+     util
+     libcrsf
+     skymap
+     mim_settings
+     mim_conn
+     mim_nav
+     mim_rc
+     mim_panel
+
+     cjson
+     esp_http_server
+     spiffs
+     esp_driver_gptimer
+     esp_driver_uart
+     esp_driver_gpio
+   )

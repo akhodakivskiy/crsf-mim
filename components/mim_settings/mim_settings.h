@@ -2,12 +2,8 @@
 #define MIM_SETTINGS_H
 
 #include <esp_err.h>
-#include <stdint.h>
 #include <stdbool.h>
-
-#include "nav.h"
-#include "nav_pitcher.h"
-#include "mim_rc.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,9 +19,22 @@ typedef struct {
     char wifi_ssid[64];
     char wifi_password[64];
     uint16_t skymap_udp_port;
-    mim_rc_channel_t engage_channel;
-    nav_config_t nav;
-    nav_pitcher_config_t pitcher;
+    uint8_t engage_channel;
+    struct {
+        float N;
+        float max_roll_deg;
+        float attack_angle_deg;
+        float attack_factor;
+    } nav;
+    struct {
+        float kp;
+        float kd;
+        float ki;
+        float max_rate;
+        float integral_limit;
+        float alpha;
+        bool inverted;
+    } pitcher;
 } mim_settings_t;
 
 esp_err_t mim_settings_init(void);
@@ -34,7 +43,7 @@ esp_err_t mim_settings_load(void);
 
 esp_err_t mim_settings_save(void);
 
-const mim_settings_t* mim_settings_get(void);
+const mim_settings_t *mim_settings_get(void);
 
 esp_err_t mim_settings_reset_to_defaults(void);
 
@@ -44,7 +53,7 @@ esp_err_t mim_settings_set_wifi(const char *ssid, const char *password);
 
 esp_err_t mim_settings_set_skymap_udp_port(uint16_t port);
 
-esp_err_t mim_settings_set_engage_channel(mim_rc_channel_t channel);
+esp_err_t mim_settings_set_engage_channel(uint8_t channel);
 
 esp_err_t mim_settings_set_nav_N(float N);
 

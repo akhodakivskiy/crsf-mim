@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRSF-MIM Control Panel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #eee;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            grid-template-areas:
+                "status status"
+                "map map"
+                "guidance guidance"
+                "control control"
+                "settings settings";
+        }
+        .panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .panel h3 {
+            margin: 0 0 15px 0;
+            color: #4CAF50;
+            font-size: 16px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        .ready { background-color: #4CAF50; }
+        .not-ready { background-color: #f44336; }
+        #map {
+            height: 400px;
+            background: #333;
+            border-radius: 8px;
+            position: relative;
+        }
+        #control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .engage-button {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .engage-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+        .engaging {
+            background: linear-gradient(135deg, #f44336 0%, #f44336 100%);
+            color: white;
+            box-shadow: 0 0 0 10px rgba(244, 67, 54, 0.5);
+        }
+    </style>
+  <script type="module" crossorigin src="/index-BLA1XhbU.js"></script>
+  <link rel="stylesheet" crossorigin href="/style-BP-bNX3r.css">
+</head>
+<body>
+    <div id="app"></div>
+</body>
+</html>

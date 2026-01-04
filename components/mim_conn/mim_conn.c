@@ -1,6 +1,6 @@
 #include "mim_conn.h"
 #include "libnet.h"
-#include "mim_settings.h"
+// #include "mim_settings.h"
 #include "skymap.h"
 
 #include <esp_heap_caps.h>
@@ -131,7 +131,9 @@ static void _mim_conn_libnet_init(mim_conn_handle_t h) {
     cfg.callbacks.disconnected = _on_disconnected;
     cfg.callbacks.packet = _on_packet;
     cfg.user_ctx = h;
+    cfg.interface = LIBNET_INTERFACE_ETHERNET;
 
+    /*
     switch (h->config.netmode) {
     case MIM_SETTINGS_MODE_ETHERNET:
         cfg.interface = LIBNET_INTERFACE_ETHERNET;
@@ -142,6 +144,7 @@ static void _mim_conn_libnet_init(mim_conn_handle_t h) {
         strncpy(cfg.net.wifi.password, mim_settings_get()->wifi_password, sizeof(cfg.net.wifi.password));
         break;
     }
+    */
 
     ESP_ERROR_CHECK(libnet_init(&cfg, &h->libnet));
     ESP_ERROR_CHECK(libnet_udp_server_start(h->libnet, h->config.mim_port));

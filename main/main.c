@@ -1,8 +1,6 @@
 #include "soc/soc.h"
 #include <sdkconfig.h>
 
-#ifdef CONFIG_CRSF_MIM_FIRMWARE_TX
-
 #include <driver/gptimer.h>
 #include <driver/uart.h>
 #include <esp_log.h>
@@ -26,8 +24,13 @@
 #include "mim_telem.h"
 #include "mim_uart.h"
 
+#ifdef CONFIG_MIM_PANEL_ENABLED
+#include "mim_panel.h"
+#endif
+
 static const char *TAG = "MAIN_TX";
 
+#define PRIORITY_PANEL (configMAX_PRIORITIES - 4)
 #define PRIORITY_TASK_ASYNC_LOGGING (configMAX_PRIORITIES - 3)
 #define PRIORITY_TASK_SKYMAP (configMAX_PRIORITIES - 2)
 #define PRIORITY_TASK_CRSF (configMAX_PRIORITIES - 1)
@@ -54,6 +57,10 @@ crsf_device_t crsf_device;
 mim_nav_handle_t nav;
 mim_conn_handle_t conn;
 
+#ifdef CONFIG_MIM_PANEL_ENABLED
+mim_panel_handle_t panel;
+#endif
+
 void app_main(void) {
     async_logging_init(APP_CPU_NUM, PRIORITY_TASK_ASYNC_LOGGING);
 
@@ -66,12 +73,14 @@ void app_main(void) {
     ESP_ERROR_CHECK(mim_nav_init(&nav));
 
     ESP_LOGI(TAG, "initializing nav message queue");
-    mim_conn_config_t conn_cfg = {.callback = mim_nav_on_message,
-                                  .callback_arg = nav,
-                                  .mim_port = mim_settings_get()->skymap_udp_port,
-                                  .core = PRO_CPU_NUM,
-                                  .priority = PRIORITY_TASK_SKYMAP,
-                                  .netmode = mim_settings_get()->mode};
+    mim_conn_config_t conn_cfg = {
+        .callback = mim_nav_on_message,
+        .callback_arg = nav,
+        .mim_port = mim_settings_get()->skymap_udp_port,
+        .core = PRO_CPU_NUM,
+        .priority = PRIORITY_TASK_SKYMAP,
+        //.netmode = mim_settings_get()->mode
+    };
     ESP_ERROR_CHECK(mim_conn_init(&conn_cfg, &conn));
 
     // init CRSF device menu
@@ -92,6 +101,19 @@ void app_main(void) {
         .pin_module = (gpio_num_t)CONFIG_CRSF_MIM_PIN_MODULE,
     };
     mim_uart_init(&uart_cfg);
+
+#ifdef CONFIG_MIM_PANEL_ENABLED
+    mim_panel_config_t panel_cfg = {
+        .nav = nav,
+        .conn = conn,
+        .http_port = 80,
+        .update_rate_hz = CONFIG_MIM_PANEL_RATE_HZ,
+        .max_clients = CONFIG_MIM_PANEL_MAX_CLIENTS,
+        .core = PRO_CPU_NUM,
+        .priority = PRIORITY_PANEL,
+    };
+    ESP_ERROR_CHECK(mim_panel_init(&panel_cfg, &panel));
+#endif
 }
 
 static IRAM_ATTR void _frame_handler_module(crsf_frame_t *frame) {
@@ -182,5 +204,3 @@ static void _frame_handler_telemetry() {
         mim_uart_enqueue_module_frame(&frame);
     }
 }
-
-#endif

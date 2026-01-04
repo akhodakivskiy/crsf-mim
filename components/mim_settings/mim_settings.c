@@ -1,27 +1,26 @@
 #include "mim_settings.h"
 #include "esp_err.h"
-#include "mim_rc.h"
 #include "sdkconfig.h"
+
+#include <esp_log.h>
+#include <nvs.h>
+#include <nvs_flash.h>
+#include <string.h>
 
 #define SETTINGS_NAMESPACE "mim_settings"
 #define SETTINGS_KEY "mim_config"
 
-#include <nvs_flash.h>
-#include <nvs.h>
-#include <esp_log.h>
-#include <string.h>
-
-static const char* TAG = "mim_settings";
+static const char *TAG = "mim_settings";
 
 static mim_settings_t mim_settings_current;
 static bool mim_settings_initialized = false;
 
 static const mim_settings_t mim_settings_default = {
     .mode = MIM_SETTINGS_MODE_ETHERNET,
-    .wifi_ssid = CONFIG_CRSF_MIM_WIFI_SSID,
-    .wifi_password = CONFIG_CRSF_MIM_WIFI_PASSWORD,
+    .wifi_ssid = CONFIG_MIM_WIFI_SSID,
+    .wifi_password = CONFIG_MIM_WIFI_PASSWORD,
     .skymap_udp_port = 8888,
-    .engage_channel = MIM_RC_CHANNEL_16,
+    .engage_channel = 15, // channel 16 on the transmitter
     .nav = {
         .N = 3,
         .max_roll_deg = 35,
@@ -115,7 +114,7 @@ esp_err_t mim_settings_save(void) {
     return ret;
 }
 
-const IRAM_ATTR mim_settings_t* mim_settings_get(void) {
+const IRAM_ATTR mim_settings_t *mim_settings_get(void) {
     if (!mim_settings_initialized) {
         return NULL;
     }
@@ -141,7 +140,7 @@ esp_err_t mim_settings_set_mode(mim_settings_mode_t mode) {
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_wifi(const char* ssid, const char* password) {
+esp_err_t mim_settings_set_wifi(const char *ssid, const char *password) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -168,7 +167,7 @@ esp_err_t mim_settings_set_skymap_udp_port(uint16_t port) {
     return ESP_OK;
 }
 
-esp_err_t mim_settings_set_engage_channel(mim_rc_channel_t channel) {
+esp_err_t mim_settings_set_engage_channel(uint8_t channel) {
     if (!mim_settings_initialized) {
         return ESP_ERR_INVALID_STATE;
     }

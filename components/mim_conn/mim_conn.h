@@ -5,7 +5,6 @@
 #include <lwip/ip4_addr.h>
 
 #include "libcrsf_payload.h"
-#include "mim_settings.h"
 #include "portmacro.h"
 #include "skymap.pb.h"
 
@@ -58,7 +57,7 @@ typedef struct {
     mim_conn_callback callback;
     void *callback_arg;
 
-    mim_settings_mode_t netmode;
+    // mim_settings_mode_t netmode;
 
     uint16_t mim_port;
 } mim_conn_config_t;

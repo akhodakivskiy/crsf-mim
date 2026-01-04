@@ -236,7 +236,15 @@ static void _nav_update(mim_nav_handle_t h) {
         nav_state_advance(state_interceptor, h->time_last_message);
         nav_state_advance(&h->state_target, h->time_last_message);
 
-        nav_compute_command(&mim_settings_get()->nav, state_interceptor, &h->state_target, &h->command);
+        const mim_settings_t *s = mim_settings_get();
+        nav_config_t nav_cfg = {
+            .N = s->nav.N,
+            .max_roll_deg = s->nav.max_roll_deg,
+            .attack_angle_deg = s->nav.attack_angle_deg,
+            .attack_factor = s->nav.attack_factor,
+        };
+
+        nav_compute_command(&nav_cfg, state_interceptor, &h->state_target, &h->command);
         h->time_last_command = h->time_last_message;
     }
 
@@ -244,11 +252,22 @@ static void _nav_update(mim_nav_handle_t h) {
     if (h->command.type != NAV_NONE && h->is_engaging) {
         float dt_s = (float)(h->time_last_message - h->time_last_update) / 1000000.0;
 
+        const mim_settings_t *s = mim_settings_get();
+        nav_pitcher_config_t nav_pitcher_cfg = {
+            .kp = s->pitcher.kp,
+            .kd = s->pitcher.kd,
+            .ki = s->pitcher.ki,
+            .max_rate = s->pitcher.max_rate,
+            .integral_limit = s->pitcher.integral_limit,
+            .alpha = s->pitcher.alpha,
+            .inverted = s->pitcher.inverted,
+        };
+
         la_float max_roll_rad = NAV_DEG_TO_RAD(mim_settings_get()->nav.max_roll_deg);
 
         la_float roll_cmd = la_clamp2(la_atan2(h->command.accel_lat, NAV_G) / max_roll_rad, 1);
         la_float pitch_cmd = nav_pitcher_update(
-            &mim_settings_get()->pitcher, &h->state_pitcher, dt_s, state_interceptor->vel_up, h->command.accel_ver);
+            &nav_pitcher_cfg, &h->state_pitcher, dt_s, state_interceptor->vel_up, h->command.accel_ver);
 
         uint16_t roll_ticks = CRSF_RC_CHANNELS_CENTER + roll_cmd * CRSF_RC_CHANNELS_RANGE / 2;
         uint16_t pitch_ticks = CRSF_RC_CHANNELS_CENTER + pitch_cmd * CRSF_RC_CHANNELS_RANGE / 2;

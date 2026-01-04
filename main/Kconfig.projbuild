@@ -1,45 +1,44 @@
 menu "CRSF-MIM"
-    choice CRSF_MIM_FIRMWARE
-        prompt "Board"
-        default CRSF_MIM_FIRMWARE_TX
-        config CRSF_MIM_FIRMWARE_TX
-            bool "TX"
-            help
-                Transmitter firmware
-        config CRSF_MIM_FIRMWARE_RX
-            bool "RX"
-            help
-                Receiver firmware
-    endchoice
-    config CRSF_MIM_PIN_CONTROLLER
+    config MIM_PIN_CONTROLLER
         int "Controller GPIO pin"
         default 45
         help
             "GPIO pin number connected to the Controller"
-    config CRSF_MIM_PIN_MODULE
+    config MIM_PIN_MODULE
         int "Module GPIO pin"
         default 46
         help
             "GPIO pin number connected to the TX Module"
-    config CRSF_MIM_SKYMAP_UDP_PORT
+    config MIM_SKYMAP_UDP_PORT
         int "UDP port for Skymap"
         help
             "UDP Port on which Skymap will send TATEP traffic"
-    config CRSF_MIM_WIFI_SSID
+    config MIM_WIFI_SSID
         string "WiFi SSID"
         help
             WiFi SSID for Wifi Mode
-    config CRSF_MIM_WIFI_PASSWORD
+    config MIM_WIFI_PASSWORD
         string "WiFi Password"
         help
             WiFi Password for WiFi Mode
-    config CRSF_MIM_SKYMAP_UDP_PORT
-        int "UDP port for Skymap"
-        help
-            "UDP Port on which Skymap will send TATEP traffic"
-    config CRSF_MIM_CHANNELS_RESPONSE
+    config MIM_CHANNELS_RESPONSE
         bool "Respond with Channels Message"
         default n
         help
-            Will respond with overridden first 4 channels for debugging
+            "Will respond with overridden first 4 channels for debugging"
+
+    config MIM_PANEL_ENABLED
+        bool "Enable HTTP dashboard"
+        select HTTPD_WS_SUPPORT
+        default y
+        help
+          "HTTP dashboard that displays interceptor and target, config, and engagement controls"
+    config MIM_PANEL_MAX_CLIENTS
+        int "Max number of clients for the HTTP dashboard"
+        default 5
+        help
+            "Multiple clients can view and interact with the HTTP panel"
+    config MIM_PANEL_RATE_HZ
+        int "HTTP dashboard refresh rate"
+        default 4
 endmenu
