@@ -1,76 +1,113 @@
 <script>
-  export let guidance;
+  let { guidance } = $props();
 </script>
 
 {#if guidance.type === "none"}
   <div class="no-guidance">No Guidance</div>
 {:else}
-  <div class="guidance-data">
-    <div class="gauge-row">
-      <div class="gauge-label">Type</div>
-      <div class="gauge-value">{guidance.type}</div>
-    </div>
-    <div class="gauge-row">
+  <div class="guidance-header">{guidance.type}</div>
+  <div class="guidance-grid">
+    <div class="gauge-item">
       <div class="gauge-label">Range</div>
-      <div class="gauge-value">{guidance.range.toFixed(1)}m</div>
+      <div class="gauge-value">{guidance.range.toFixed(0)}m</div>
     </div>
-    <div class="gauge-row">
-      <div class="gauge-label">Range H</div>
-      <div class="gauge-value">{guidance.rangeHor.toFixed(1)}m</div>
+    <div class="gauge-item">
+      <div class="gauge-label">H</div>
+      <div class="gauge-value">{guidance.rangeHor.toFixed(0)}m</div>
     </div>
-    <div class="gauge-row">
-      <div class="gauge-label">Range V</div>
-      <div class="gauge-value">{guidance.rangeVer.toFixed(1)}m</div>
+    <div class="gauge-item">
+      <div class="gauge-label">V</div>
+      <div class="gauge-value">{guidance.rangeVer.toFixed(0)}m</div>
     </div>
-    <div class="gauge-row">
-      <div class="gauge-label">Accel Lat</div>
+    <div class="gauge-item">
+      <div class="gauge-label">Lat</div>
       <div class="gauge-value">{guidance.accelLat.toFixed(2)}g</div>
     </div>
-    <div class="gauge-row">
-      <div class="gauge-label">Accel Ver</div>
+    <div class="gauge-item">
+      <div class="gauge-label">Ver</div>
       <div class="gauge-value">{guidance.accelVer.toFixed(2)}g</div>
     </div>
-    <div class="gauge-row">
+    <div class="gauge-item">
       <div class="gauge-label">TTG</div>
       <div class="gauge-value">{guidance.ttg.toFixed(1)}s</div>
     </div>
-    <div class="gauge-row">
+    <div class="gauge-item">
       <div class="gauge-label">ZEM</div>
-      <div class="gauge-value">{guidance.zem.toFixed(1)}m</div>
+      <div class="gauge-value">{guidance.zem.toFixed(0)}m</div>
     </div>
   </div>
 {/if}
 
 <style>
-  .guidance-data {
-    display: grid;
-    gap: 10px;
+  .guidance-header {
+    text-align: center;
+    font-weight: bold;
+    color: #4caf50;
+    margin-bottom: 8px;
+    padding: 4px;
+    background: rgba(76, 175, 80, 0.1);
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-size: 12px;
   }
 
-  .gauge-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.1);
+  .guidance-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .gauge-item {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 6px;
+    border-radius: 4px;
+    text-align: center;
   }
 
   .gauge-label {
     font-weight: bold;
-    font-size: 12px;
+    font-size: 10px;
+    color: #999;
+    margin-bottom: 2px;
   }
 
   .gauge-value {
     font-family: monospace;
-    font-size: 14px;
-    text-align: right;
+    font-size: 13px;
+    color: #fff;
   }
 
   .no-guidance {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 100px;
+    height: 80px;
     color: #666;
+    font-size: 14px;
+  }
+
+  @media (min-width: 768px) {
+    .guidance-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .gauge-item {
+      padding: 8px;
+    }
+
+    .gauge-label {
+      font-size: 11px;
+    }
+
+    .gauge-value {
+      font-size: 14px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .guidance-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

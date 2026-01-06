@@ -1,8 +1,5 @@
 <script>
-  export let settings;
-  export let onSettingsChange;
-
-  console.log(settings);
+  let { settings, onSettingsChange } = $props();
 
   function handleNavChange(key, value) {
     onSettingsChange("nav", { ...settings.nav, [key]: parseFloat(value) });
@@ -30,7 +27,7 @@
   }
 </script>
 
-<div class="settings-grid">
+<div class="settings-container">
   <div class="setting-group">
     <h4>Navigation</h4>
     <div class="setting-row">
@@ -39,30 +36,30 @@
         id="id-n"
         type="number"
         value={settings.nav.N}
-        on:input={(e) => handleNavChange("N", e.target.value)}
+        oninput={(e) => handleNavChange("N", e.target.value)}
         step="0.1"
         min="1"
         max="10"
       />
     </div>
     <div class="setting-row">
-      <label for="id-max-roll">Max Roll (deg)</label>
+      <label for="id-max-roll">Max Roll</label>
       <input
         id="id-max-roll"
         type="number"
         value={settings.nav.maxRollDeg}
-        on:input={(e) => handleNavChange("maxRollDeg", e.target.value)}
+        oninput={(e) => handleNavChange("maxRollDeg", e.target.value)}
         min="10"
         max="90"
       />
     </div>
     <div class="setting-row">
-      <label for="id-aoa">Attack Angle (deg)</label>
+      <label for="id-aoa">Attack Angle</label>
       <input
         id="id-aoa"
         type="number"
         value={settings.nav.attackAngleDeg}
-        on:input={(e) => handleNavChange("attackAngleDeg", e.target.value)}
+        oninput={(e) => handleNavChange("attackAngleDeg", e.target.value)}
         min="0"
         max="90"
       />
@@ -73,7 +70,7 @@
         id="id-atk-factor"
         type="number"
         value={settings.nav.attackFactor}
-        on:input={(e) => handleNavChange("attackFactor", e.target.value)}
+        oninput={(e) => handleNavChange("attackFactor", e.target.value)}
         step="0.1"
         min="0.1"
         max="5"
@@ -89,7 +86,7 @@
         id="id-kp"
         type="number"
         value={settings.pitcher.kp}
-        on:input={(e) => handlePitcherChange("kp", e.target.value)}
+        oninput={(e) => handlePitcherChange("kp", e.target.value)}
         step="0.01"
         min="0"
         max="1"
@@ -101,7 +98,7 @@
         id="id-ki"
         type="number"
         value={settings.pitcher.ki}
-        on:input={(e) => handlePitcherChange("ki", e.target.value)}
+        oninput={(e) => handlePitcherChange("ki", e.target.value)}
         step="0.001"
         min="0"
         max="0.1"
@@ -113,7 +110,7 @@
         id="id-kd"
         type="number"
         value={settings.pitcher.kd}
-        on:input={(e) => handlePitcherChange("kd", e.target.value)}
+        oninput={(e) => handlePitcherChange("kd", e.target.value)}
         step="0.001"
         min="0"
         max="0.1"
@@ -125,7 +122,7 @@
         id="id-max-rate"
         type="number"
         value={settings.pitcher.maxRate}
-        on:input={(e) => handlePitcherChange("maxRate", e.target.value)}
+        oninput={(e) => handlePitcherChange("maxRate", e.target.value)}
         step="0.1"
         min="0.1"
         max="2"
@@ -137,59 +134,107 @@
         id="id-inverted"
         type="checkbox"
         checked={settings.pitcher.inverted}
-        on:change={(e) => handlePitcherToggle("inverted", e.target.checked)}
+        onchange={(e) => handlePitcherToggle("inverted", e.target.checked)}
       />
     </div>
   </div>
 
-  <button class="save-button" on:click={handleSave}>Save Settings</button>
+  <button class="save-button" onclick={handleSave}>Save Settings</button>
 </div>
 
 <style>
-  .settings-grid {
-    display: grid;
-    grid-template-columns: 150px 1fr;
+  .settings-container {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
-    padding: 10px;
   }
 
   .setting-group {
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.2);
     padding: 10px;
     border-radius: 4px;
   }
 
   .setting-group h4 {
-    margin: 0 0 10px 0;
-    color: #333;
+    margin: 0 0 8px 0;
+    color: #4caf50;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .setting-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
   }
 
-  .setting-row input {
-    padding: 6px;
-    border: 1px solid #555;
+  .setting-row label {
+    flex: 1;
+    color: #ccc;
+  }
+
+  .setting-row input[type="number"] {
+    width: 80px;
+    padding: 4px 6px;
+    border: 1px solid #444;
     border-radius: 3px;
-    background: white;
+    background: #1a1a1a;
+    color: #fff;
+    font-size: 12px;
+  }
+
+  .setting-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
   }
 
   .save-button {
-    grid-column: span 2;
     padding: 12px;
     font-weight: bold;
+    font-size: 14px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     background: #4caf50;
     color: white;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+    touch-action: manipulation;
   }
 
-  .save-button:hover {
-    background: #45a049;
+  .save-button:active {
+    transform: scale(0.98);
+  }
+
+  @media (min-width: 768px) {
+    .settings-container {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .save-button {
+      grid-column: span 2;
+    }
+
+    .save-button:hover {
+      background: #45a049;
+      transform: translateY(-1px);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .settings-container {
+      grid-template-columns: 1fr;
+    }
+
+    .save-button {
+      grid-column: span 1;
+    }
   }
 </style>

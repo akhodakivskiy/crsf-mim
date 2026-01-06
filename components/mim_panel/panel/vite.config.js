@@ -8,8 +8,9 @@ export default defineConfig(({ mode }) => {
     plugins: [svelte({
       compilerOptions: {
         dev: isDev,
+        hmr: false
       },
-      emitCss: true
+      emitCss: true,
     })],
 
     // Tell Vite/Rollup explicitly what the entry HTML is
@@ -20,6 +21,9 @@ export default defineConfig(({ mode }) => {
       assetsDir: '',
       cssCodeSplit: false,
       rollupOptions: {
+        input: {
+          main: './index.html'
+        },
         output: {
           // Inline small assets to reduce HTTP requests
           inlineDynamicImports: true,
